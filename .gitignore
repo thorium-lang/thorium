@@ -10,3 +10,14 @@ Cargo.lock
 **/*.rs.bk
 
 **/__pycache__
+
+# ANTLR artifacts
+**/*.interp
+**/*.tokens
+**/*Lexer.interp
+**/*Lexer.py
+**/*Lexer.tokens
+**/*Listener.py
+**/*Parser.py
+**/*Visitor.py
+
