@@ -1,0 +1,24 @@
+interface Stage {
+    output: stream Int
+}
+
+reactor Counter(init: Int, clock: stream Unit) : Stage {
+    output = value @ clock;
+
+private:
+    value  = init .. (value + 1 @ clock);
+}
+
+reactor Filter(prime: Int, input: stream Int) : Stage {
+    output = input if (input % prime != 0);
+}
+
+reactor Sieve(clock: stream Unit) {
+    output = curr.output;
+
+private:
+    curr: cell Stage = Counter(2,clock) ..
+                       Filter(output, curr.output);
+properties:
+    G is_prime(output);
+}
