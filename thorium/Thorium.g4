@@ -42,14 +42,15 @@ reactiveType: (CELL|STREAM) type;
 
 type : ID ;
 
-expr: expr DOTS expr          # hold
-    | expr AT expr            # snapshot
-    | expr (PLUS|MINUS) expr  # add
-    | expr (STAR|DIV) expr    # mult
-    | MINUS expr              # negative
+expr:
+      MINUS expr              # negative
     | ID                      # id
     | NUMBER                  # number
     | LPAREN expr RPAREN      # paren
+    | expr (STAR|DIV) expr    # mult
+    | expr (PLUS|MINUS) expr  # add
+    | expr AT expr            # snapshot
+    | expr DOTS expr          # hold
     ;
 
 LPAREN     : '(' ;

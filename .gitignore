@@ -21,3 +21,5 @@ Cargo.lock
 **/*Parser.py
 **/*Visitor.py
 
+.idea
+*.swp

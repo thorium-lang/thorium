@@ -1,1 +1,1 @@
-../test/compiler.py ../test/anatomy-accumulator.rct 
+PYTHONPATH=.. ../test/compiler.py ../test/counter.rct 
