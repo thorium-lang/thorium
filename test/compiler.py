@@ -14,7 +14,7 @@ class Cell:
         self.type = type
 
     def __repr__(self):
-        return f'stream {self.type}'
+        return f'cell {self.type}'
 
 class Stream:
     def __init__(self, type):
@@ -62,6 +62,23 @@ class ReactorType:
     private: {indented_typed_identifiers(self.private_members)}
 '''
 
+class StructType:
+    def __init__(self, name: str,
+                       members: List[TypedIdentifier]):
+        self.name = name
+        self.members = members
+        self.members_dict = {m.name:m.type for m in members}
+
+    def getPublicMemberType(self, name):
+        return self.members[name]
+
+    def __repr__(self):
+        def indented_typed_identifiers(id_list):
+            return '\n             '.join((f'{id.name} : {id.type}' for id in id_list))
+
+        return f'''struct {self.name}
+    members: {indented_typed_identifiers(self.members)}
+'''
 
 class DeclaredTypes(ThoriumVisitor):
     def visitProg(self, ctx:ThoriumParser.ProgContext):
@@ -73,11 +90,14 @@ class DeclaredTypes(ThoriumVisitor):
         if ctx.reactor(): return self.visit(ctx.reactor())
 
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
-        print(f'visitReactor {ctx.reactorMembers(0)} {ctx.reactorMembers(1)}')
         return ReactorType(ctx.ID().getText(),
-                           self.visit(ctx.reactorParams()),
-                           self.visit(ctx.reactorMembers(0)),
+                           self.visitOrDefault(ctx.reactorParams(),[]),
+                           self.visitOrDefault(ctx.reactorMembers(0),[]),
                            self.visitOrDefault(ctx.reactorMembers(1),[]))
+
+    def visitStruct(self, ctx:ThoriumParser.ReactorContext):
+        return StructType(ctx.ID().getText(),
+                           self.visitOrDefault(ctx.structMembers(),[]))
 
     def visitOrDefault(self,node,default):
         if node:
@@ -98,18 +118,17 @@ class DeclaredTypes(ThoriumVisitor):
     def visitReactorParam(self, ctx:ThoriumParser.ReactorParamContext):
         return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.reactiveType()))
 
+    def visitStructMembers(self, ctx:ThoriumParser.StructMembersContext):
+        return lmap(self.visit, ctx.structMember())
+
+    def visitStructMember(self, ctx:ThoriumParser.StructMemberContext):
+        return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.type_()))
+
     def visitReactorMembers(self, ctx:ThoriumParser.ReactorMembersContext):
-        print(f'members {ctx.reactorMember()}')
-        returnval =  lmap(self.visit, ctx.reactorMember())
-        print(f'    {returnval}')
-        return returnval
+        return lmap(self.visit, ctx.reactorMember())
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
-        print(f'  member {ctx.ID()}')
-        #returnval =  TypedIdentifier(ctx.ID().getText(), '<insert_type_here>') #self.visit(ctx.reactiveType()))
-        returnval =  TypedIdentifier(ctx.ID().getText(), self.visit(ctx.reactiveType()))
-        print(f'  (in member)  {returnval}')
-        return returnval
+        return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.reactiveType()))
 
 class PrintVisitor(ThoriumVisitor):
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
