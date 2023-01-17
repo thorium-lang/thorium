@@ -43,6 +43,10 @@ class ReactorType:
         self.private_members = private_members
         self.private_members_dict = {m.name:m.type for m in private_members}
 
+    def declareZ3Constructor(self, type_ctx):
+        arguments = [(id.name,type_ctx(id.sort)) for id in self.params+self.public_members+self.private_members]
+        type_ctx(self.name).declare(f'mk-{self.name}', *arguments)
+
     def getParamType(self, i):
         return self.params[i].type
 
@@ -69,6 +73,10 @@ class StructType:
         self.members = members
         self.members_dict = {m.name:m.type for m in members}
 
+    def declareZ3Constructor(self, type_ctx):
+        arguments = [(id.name, type_ctx(id.type)) for id in self.members]
+        type_ctx(self.name).declare(f'mk-{self.name}', *arguments)
+
     def getPublicMemberType(self, name):
         return self.members[name]
 
@@ -79,6 +87,28 @@ class StructType:
         return f'''struct {self.name}
     members: {indented_typed_identifiers(self.members)}
 '''
+
+class TypeContext:
+    def __init__(self,ctx: z3.Context):
+        self.types = {'int':z3.IntSort(ctx),
+                      'real':z3.RealSort(ctx)}
+        self.Datatypes = []
+
+    def addDatatype(self, datatype):
+        self.Datatypes.append(datatype)
+
+    def __call__(self, type):
+        if type is Cell:
+            return self.types[type.type]
+        if type is Stream:
+            return self.types[type.type]
+        return self.types[type]
+
+    def finalizeDatatypes(self):
+        datatype_names = [dt.name for dt in self.Datatypes]
+        datatypes = z3.CreateDatatypes(*[self(name) for name in datatype_names])
+        self.types.update(
+            {name:datatype for name,datatype in zip(datatype_names, datatypes)})
 
 class DeclaredTypes(ThoriumVisitor):
     def visitProg(self, ctx:ThoriumParser.ProgContext):
