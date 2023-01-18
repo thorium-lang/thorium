@@ -44,7 +44,7 @@ class ReactorType:
         self.private_members_dict = {m.name:m.type for m in private_members}
 
     def declareZ3Constructor(self, type_ctx):
-        arguments = [(id.name,type_ctx(id.sort)) for id in self.params+self.public_members+self.private_members]
+        arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members]
         type_ctx(self.name).declare(f'mk-{self.name}', *arguments)
 
     def getParamType(self, i):
@@ -90,23 +90,38 @@ class StructType:
 
 class TypeContext:
     def __init__(self,ctx: z3.Context):
+        unit = z3.Datatype('unit')
+        unit.declare('mk-unit')
+        unit = unit.create()
         self.types = {'int':z3.IntSort(ctx),
-                      'real':z3.RealSort(ctx)}
+                      'real':z3.RealSort(ctx),
+                      'unit':unit}
         self.Datatypes = []
 
     def addDatatype(self, datatype):
         self.Datatypes.append(datatype)
+        self.types[datatype.name] = z3.Datatype(datatype.name)
 
-    def __call__(self, type):
-        if type is Cell:
-            return self.types[type.type]
-        if type is Stream:
-            return self.types[type.type]
-        return self.types[type]
+    def __call__(self, type_):
+        print(type(type_))
+        if isinstance(type_,Cell):
+            print("It's a cell")
+            return self.types[type_.type]
+        if isinstance(type_,Stream):
+            print("It's a stream")
+            return self.types[type_.type]
+        return self.types[type_]
 
     def finalizeDatatypes(self):
+        for datatype in self.Datatypes:
+            datatype.declareZ3Constructor(self)
         datatype_names = [dt.name for dt in self.Datatypes]
-        datatypes = z3.CreateDatatypes(*[self(name) for name in datatype_names])
+        print(f'finalizing datatypes {datatype_names}')
+        args = [self(name) for name in datatype_names]
+        print(f'finalizing true datatypes')
+        for arg in args:
+            print(f'    {arg}')
+        datatypes = z3.CreateDatatypes(*args)
         self.types.update(
             {name:datatype for name,datatype in zip(datatype_names, datatypes)})
 
@@ -226,8 +241,12 @@ def main(argv):
 
     type_decl_visitor = DeclaredTypes()
     type_decls = type_decl_visitor.visitProg(tree)
+    z3_context = z3.Context()
+    type_context = TypeContext(z3_context)
     for decl in type_decls:
+        type_context.addDatatype(decl)
         print(decl)
+    type_context.finalizeDatatypes()
     visitor = PrintVisitor()
     visitor = PrintVisitor()
     visitor.visitProg(tree)
