@@ -13,15 +13,28 @@ class Cell:
     def __init__(self, type):
         self.type = type
 
+    def __str__(self):
+        return f'cell-{self.type}'
+
     def __repr__(self):
-        return f'cell {self.type}'
+        return f'cell-{self.type}'
 
 class Stream:
     def __init__(self, type):
         self.type = type
+        self.name = self
+
+    def declareZ3Constructor(self, type_ctx):
+        #type_ctx(self).declare(f'{self.type}-event', ('value',type_ctx(self.type)))
+        #type_ctx(self).declare(f'{self.type}-nothing')
+        type_ctx(self).declare('event', ('value',type_ctx(self.type)))
+        type_ctx(self).declare('nothing')
+
+    def __str__(self):
+        return f'stream-{self.type}'
 
     def __repr__(self):
-        return f'stream {self.type}'
+        return f'stream-{self.type}'
 
 class TypedIdentifier:
     def __init__(self, name, type):
@@ -45,7 +58,7 @@ class ReactorType:
 
     def declareZ3Constructor(self, type_ctx):
         arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members]
-        type_ctx(self.name).declare(f'mk-{self.name}', *arguments)
+        type_ctx(self.name).declare(f'{self.name}', *arguments)
 
     def getParamType(self, i):
         return self.params[i].type
@@ -55,6 +68,9 @@ class ReactorType:
 
     def getPrivateMemberType(self, name):
         return self.private_members[name]
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self):
         def indented_typed_identifiers(id_list):
@@ -75,10 +91,13 @@ class StructType:
 
     def declareZ3Constructor(self, type_ctx):
         arguments = [(id.name, type_ctx(id.type)) for id in self.members]
-        type_ctx(self.name).declare(f'mk-{self.name}', *arguments)
+        type_ctx(self.name).declare(f'{self.name}', *arguments)
 
     def getPublicMemberType(self, name):
         return self.members[name]
+
+    def __str__(self):
+        return self.name
 
     def __repr__(self):
         def indented_typed_identifiers(id_list):
@@ -89,38 +108,35 @@ class StructType:
 '''
 
 class TypeContext:
-    def __init__(self,ctx: z3.Context):
+    def __init__(self):
         unit = z3.Datatype('unit')
-        unit.declare('mk-unit')
+        unit.declare('unit')
         unit = unit.create()
-        self.types = {'int':z3.IntSort(ctx),
-                      'real':z3.RealSort(ctx),
+        self.types = {'int':z3.IntSort(),
+                      'real':z3.RealSort(),
                       'unit':unit}
         self.Datatypes = []
+        self.addDatatype(Stream('int'))
+        self.addDatatype(Stream('real'))
+        self.addDatatype(Stream('unit'))
+
 
     def addDatatype(self, datatype):
         self.Datatypes.append(datatype)
-        self.types[datatype.name] = z3.Datatype(datatype.name)
+        self.types[str(datatype)] = z3.Datatype(str(datatype))
+        if not isinstance(datatype, Stream):
+            self.addDatatype(Stream(datatype.name))
 
     def __call__(self, type_):
-        print(type(type_))
         if isinstance(type_,Cell):
-            print("It's a cell")
-            return self.types[type_.type]
-        if isinstance(type_,Stream):
-            print("It's a stream")
-            return self.types[type_.type]
-        return self.types[type_]
+            return self.types[str(type_.type)]
+        return self.types[str(type_)]
 
     def finalizeDatatypes(self):
         for datatype in self.Datatypes:
             datatype.declareZ3Constructor(self)
-        datatype_names = [dt.name for dt in self.Datatypes]
-        print(f'finalizing datatypes {datatype_names}')
+        datatype_names = [str(dt) for dt in self.Datatypes]
         args = [self(name) for name in datatype_names]
-        print(f'finalizing true datatypes')
-        for arg in args:
-            print(f'    {arg}')
         datatypes = z3.CreateDatatypes(*args)
         self.types.update(
             {name:datatype for name,datatype in zip(datatype_names, datatypes)})
@@ -178,9 +194,9 @@ class DeclaredTypes(ThoriumVisitor):
 class PrintVisitor(ThoriumVisitor):
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
         params = self.visit(ctx.reactorParams())
-        print(f'params: {params}')
+        #print(f'params: {params}')
         members = [self.visit(m) for m in ctx.reactorMembers()]
-        print(f'members: {members}')
+        #print(f'members: {members}')
 
     def visitReactorParams(self, ctx:ThoriumParser.ReactorParamsContext):
         return [self.visit(m) for m in ctx.reactorParam()]
@@ -193,7 +209,7 @@ class PrintVisitor(ThoriumVisitor):
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
         self.ExprName = ctx.ID().getText()
-        print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
+        #print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
         return ctx.ID().getText()
 
     def visitAdd(self, ctx:ThoriumParser.AddContext):
@@ -241,15 +257,27 @@ def main(argv):
 
     type_decl_visitor = DeclaredTypes()
     type_decls = type_decl_visitor.visitProg(tree)
-    z3_context = z3.Context()
-    type_context = TypeContext(z3_context)
+    type_context = TypeContext()
     for decl in type_decls:
         type_context.addDatatype(decl)
-        print(decl)
+        print(repr(decl))
     type_context.finalizeDatatypes()
     visitor = PrintVisitor()
     visitor = PrintVisitor()
     visitor.visitProg(tree)
+    Counter = type_context('counter')
+    StreamTest = type_context(Stream('test'))
+    x = z3.Const('x',type_context('int'))
+    y = z3.Const('y',Counter)
+    s = z3.Solver()
+    #print(StreamTest.constructor(1))
+    #print(StreamTest.nothing.constructor(0))
+    #help(StreamTest)
+    s.add(Counter.sum(y) == x)
+    s.add(Counter.click(y) != StreamTest.nothing)
+    s.add(x == 5)
+    print(f'check returned {s.check()}')
+    print(s.model())
 
 if __name__ == '__main__':
     main(sys.argv)

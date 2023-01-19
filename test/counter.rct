@@ -3,7 +3,7 @@ struct test {
   B : real
 }
 
-reactor counter(click: stream unit) {
+reactor counter(click: stream test) {
     sum: cell int = 0 .. sum + inc;
 private:
     inc: stream int = 1 @ click;
