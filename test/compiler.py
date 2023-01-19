@@ -209,7 +209,7 @@ class PrintVisitor(ThoriumVisitor):
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
         self.ExprName = ctx.ID().getText()
-        #print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
+        print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
         return ctx.ID().getText()
 
     def visitAdd(self, ctx:ThoriumParser.AddContext):
@@ -235,6 +235,15 @@ class PrintVisitor(ThoriumVisitor):
         if ctx.DIV(): OP = '/'
         return [OP, self.visit(ctx.expr(0)), self.visit(ctx.expr(1))]
         return self.visitChildren(ctx)
+
+    def visitAnd(self, ctx:ThoriumParser.OrContext):
+        return ['and', self.visit(ctx.expr(0)), self.visit(ctx.expr(1))]
+
+    def visitOr(self, ctx:ThoriumParser.OrContext):
+        return ['or', self.visit(ctx.expr(0)), self.visit(ctx.expr(1))]
+
+    def visitAlternate(self, ctx:ThoriumParser.AlternateContext):
+        return ['ALT', self.visit(ctx.expr(0)), self.visit(ctx.expr(1))]
 
     # Visit a parse tree produced by ThoriumParser#id.
     def visitId(self, ctx:ThoriumParser.IdContext):
@@ -265,7 +274,7 @@ def main(argv):
     visitor = PrintVisitor()
     visitor = PrintVisitor()
     visitor.visitProg(tree)
-    Counter = type_context('counter')
+    Counter = type_context('oldcounter')
     StreamTest = type_context(Stream('test'))
     x = z3.Const('x',type_context('int'))
     y = z3.Const('y',Counter)

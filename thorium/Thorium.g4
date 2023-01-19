@@ -49,7 +49,12 @@ expr:
     | LPAREN expr RPAREN      # paren
     | expr (STAR|DIV) expr    # mult
     | expr (PLUS|MINUS) expr  # add
+    | expr (LT|LE|GT|GE) expr # compare
+    | expr (EQ|NEQ) expr      # equals
+    | expr AND expr           # and
+    | expr OR  expr           # or
     | expr AT expr            # snapshot
+    | <assoc=right> expr PIPE expr          # alternate
     | expr DOTS expr          # hold
     ;
 
@@ -69,6 +74,15 @@ PLUS       : '+' ;
 MINUS      : '-' ;
 STAR       : '*' ;
 DIV        : '/' ;
+LT         : '<' ;
+LE         : '<=' ;
+GT         : '>' ;
+GE         : '>=' ;
+EQ         : '==' ;
+NEQ        : '!=' ;
+AND        : 'and' ;
+OR         : 'or' ;
+PIPE       : '|' ;
 AT         : '@' ;
 CELL       : 'cell' ;
 STREAM     : 'stream' ;
