@@ -45,29 +45,47 @@ class TypedIdentifier:
         return f'{self.name} : {self.type}'
 
 class ReactorType:
-    def __init__(self, name: str,
+    def __init__(self, ctx:ThoriumParser.ReactorContext,
+                       name: str,
                        params: List[TypedIdentifier],
                        public_members: List[TypedIdentifier],
                        private_members: List[TypedIdentifier]):
+        self.ctx = ctx
         self.name = name
         self.params = params
+        self.params_dict = {m.name:m.type for m in params}
         self.public_members = public_members
         self.public_members_dict = {m.name:m.type for m in public_members}
         self.private_members = private_members
         self.private_members_dict = {m.name:m.type for m in private_members}
+        self.subexprs = []
+        self.subexprs_dict = {}
 
     def declareZ3Constructor(self, type_ctx):
-        arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members]
+        arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members+self.subexprs]
         type_ctx(self.name).declare(f'{self.name}', *arguments)
 
     def getParamType(self, i):
         return self.params[i].type
 
     def getPublicMemberType(self, name):
-        return self.public_members[name]
+        return self.public_members_dict[name]
 
     def getPrivateMemberType(self, name):
-        return self.private_members[name]
+        return self.private_members_dict[name]
+
+    def getSubExprType(self, name):
+        return self.subexprs_dict[name]
+
+    def getType(self,name):
+        if name in self.public_members_dict: return self.public_members_dict[name]
+        if name in self.private_members_dict: return self.private_members_dict[name]
+        if name in self.params_dict: return self.params_dict[name]
+        raise Exception(f"Unknown member {name}")
+
+    def addSubExpr(self,name,type):
+        self.subexprs.append(TypedIdentifier(name,type))
+        self.subexprs_dict[name] = type
 
     def __str__(self):
         return self.name
@@ -80,11 +98,14 @@ class ReactorType:
     params:  {indented_typed_identifiers(self.params)}
     members: {indented_typed_identifiers(self.public_members)}
     private: {indented_typed_identifiers(self.private_members)}
+    subexprs: {indented_typed_identifiers(self.subexprs)}
 '''
 
 class StructType:
-    def __init__(self, name: str,
+    def __init__(self, ctx:ThoriumParser.StructContext,
+                       name: str,
                        members: List[TypedIdentifier]):
+        self.ctx = ctx
         self.name = name
         self.members = members
         self.members_dict = {m.name:m.type for m in members}
@@ -114,6 +135,7 @@ class TypeContext:
         unit = unit.create()
         self.types = {'int':z3.IntSort(),
                       'real':z3.RealSort(),
+                      'bool':z3.BoolSort(),
                       'unit':unit}
         self.Datatypes = []
         self.addDatatype(Stream('int'))
@@ -141,6 +163,7 @@ class TypeContext:
         self.types.update(
             {name:datatype for name,datatype in zip(datatype_names, datatypes)})
 
+
 class DeclaredTypes(ThoriumVisitor):
     def visitProg(self, ctx:ThoriumParser.ProgContext):
         return lmap(self.visit, ctx.decl())
@@ -151,14 +174,16 @@ class DeclaredTypes(ThoriumVisitor):
         if ctx.reactor(): return self.visit(ctx.reactor())
 
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
-        return ReactorType(ctx.ID().getText(),
+        return ReactorType(ctx,
+                           ctx.ID().getText(),
                            self.visitOrDefault(ctx.reactorParams(),[]),
                            self.visitOrDefault(ctx.reactorMembers(0),[]),
                            self.visitOrDefault(ctx.reactorMembers(1),[]))
 
     def visitStruct(self, ctx:ThoriumParser.ReactorContext):
-        return StructType(ctx.ID().getText(),
-                           self.visitOrDefault(ctx.structMembers(),[]))
+        return StructType(ctx,
+                          ctx.ID().getText(),
+                          self.visitOrDefault(ctx.structMembers(),[]))
 
     def visitOrDefault(self,node,default):
         if node:
@@ -190,6 +215,108 @@ class DeclaredTypes(ThoriumVisitor):
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
         return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.reactiveType()))
+
+
+def hasStreamType(types):
+    for type in types:
+        if isinstance(type,Stream):
+            return True
+    return False
+
+
+class ReactorSubexpressionVisitor(ThoriumVisitor):
+    def __init__(self,type_decls):
+        self.type_decls = type_decls
+
+    def visitReactor(self, ctx:ThoriumParser.ReactorContext):
+        self.reactor = self.type_decls[ctx.ID().getText()]
+        [self.visit(m) for m in ctx.reactorMembers()]
+        #for members in ctx.reactorMembers():
+        #    print(f'visiting members {members}')
+        #    return lmap(self.visit, members.reactorMember())
+
+    def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
+        self.expr = ctx.ID().getText()
+        print(f'visitReactorMember set self.expr to {self.expr}')
+        self.visit(ctx.expr())
+
+    def visitNegative(self, ctx:ThoriumParser.NegativeContext):
+        expr = self.expr
+        self.expr = f'{expr}-1'
+        type = self.visit(ctx.expr())
+        self.reactor.addSubExpr(self.expr,type)
+        return type
+
+    def visitId(self, ctx:ThoriumParser.IdContext):
+        return self.reactor.getType(ctx.ID().getText())
+
+    def visitNumber(self, ctx:ThoriumParser.NumberContext):
+        return 'int'
+
+    def visitParen(self, ctx:ThoriumParser.ParenContext):
+        return self.visit(ctx.expr())
+
+    def visitSubExprs(self,ctx):
+        expr = self.expr
+        types = []
+        for i,sub in enumerate(ctx.expr()):
+            subexpr = f'{expr}-{i+1}'
+            self.expr = subexpr
+            type = self.visit(sub)
+            types.append(type)
+            self.reactor.addSubExpr(subexpr,type)
+        return types
+
+    def visitMult(self, ctx:ThoriumParser.MultContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('int')
+        return Cell('int')
+
+    def visitAdd(self, ctx:ThoriumParser.AddContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('int')
+        return Cell('int')
+
+    def visitCompare(self, ctx:ThoriumParser.CompareContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('bool')
+        return Cell('bool')
+
+    def visitEquals(self, ctx:ThoriumParser.EqualsContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('bool')
+        return Cell('bool')
+
+    def visitAnd(self, ctx:ThoriumParser.AndContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('bool')
+        return Cell('bool')
+
+    def visitOr(self, ctx:ThoriumParser.AndContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('bool')
+        return Cell('bool')
+
+    def visitSnapshot(self, ctx:ThoriumParser.SnapshotContext):
+        cellType,streamType = self.visitSubExprs(ctx)
+        #TODO: typeCheck
+        if isinstance(cellType,Cell):
+            return Stream(cellType.type)
+        return Stream(cellType)
+
+    def visitAlternate(self, ctx:ThoriumParser.AlternateContext):
+        typeA,typeB = self.visitSubExprs(ctx)
+        #TODO: typeCheck (both should be the same kind of stream)
+        return typeA
+
+    def visitHold(self, ctx:ThoriumParser.HoldContext):
+        cellType,streamType = self.visitSubExprs(ctx)
+        #TODO: typeCheck (both should hold the same kind of value)
+        if isinstance(cellType,Cell):
+            return cellType
+        return Cell(cellType)
+
+
 
 class PrintVisitor(ThoriumVisitor):
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
@@ -257,6 +384,25 @@ class PrintVisitor(ThoriumVisitor):
     def visitHold(self, ctx:ThoriumParser.HoldContext):
         return ['HOLD', self.visit(ctx.expr(0)), self.visit(ctx.expr(1))]
 
+
+class ReactorDefiner(ThoriumVisitor):
+    def __init__(self, function:z3.Function, type_:object, type_decls:dict, type_context:TypeContext, first_state, final_state):
+        ThoriumVisitor.__init__(self)
+        self.function = function
+        self.reactor_type = type_
+        print(f'creating ReactorDefiner with type: {self.reactor_type} {type(self.reactor_type)}')
+        self.type_decls = type_decls
+        self.type_context = type_context
+        self.first_state = first_state
+        self.final_state = final_state
+
+    def run(self):
+        print(f'calling run on ReactorDefiner with type: {self.reactor_type} {type(self.reactor_type)}')
+        self.visit(self.reactor_type.ctx)
+
+    def visitReactor(self, ctx:ThoriumParser.ReactorContext):
+        print(f'ReactorDefiner visiting {ctx.ID()}')
+
 def main(argv):
     input_stream = antlr4.FileStream(argv[1])
     lexer = ThoriumLexer(input_stream)
@@ -269,21 +415,27 @@ def main(argv):
     type_context = TypeContext()
     for decl in type_decls:
         type_context.addDatatype(decl)
+    type_decls = {decl.name:decl for decl in type_decls}
+    subexprs = ReactorSubexpressionVisitor(type_decls)
+    subexprs.visitProg(tree)
+    for decl in type_decls.values():
         print(repr(decl))
     type_context.finalizeDatatypes()
     visitor = PrintVisitor()
-    visitor = PrintVisitor()
     visitor.visitProg(tree)
-    Counter = type_context('oldcounter')
-    StreamTest = type_context(Stream('test'))
+    Counter = type_context('counter')
+    StreamTest = type_context(Stream('unit'))
     x = z3.Const('x',type_context('int'))
-    y = z3.Const('y',Counter)
+    #y = z3.Const('y',Counter)
     s = z3.Solver()
     #print(StreamTest.constructor(1))
     #print(StreamTest.nothing.constructor(0))
     #help(StreamTest)
-    s.add(Counter.sum(y) == x)
-    s.add(Counter.click(y) != StreamTest.nothing)
+    counter_main = z3.Function('counter-main',z3.IntSort(),Counter)
+    print(f"type_decls['counter'] = {type_decls['counter']}")
+    ReactorDefiner(counter_main, type_decls['counter'], type_decls, type_context, 0, 5).run()
+    s.add(Counter.sum(counter_main(0)) == x)
+    s.add(Counter.click(counter_main(1)) != StreamTest.nothing)
     s.add(x == 5)
     print(f'check returned {s.check()}')
     print(s.model())
