@@ -47,14 +47,15 @@ expr:
     | ID                      # id
     | NUMBER                  # number
     | LPAREN expr RPAREN      # paren
-    | expr (STAR|DIV) expr    # mult
-    | expr (PLUS|MINUS) expr  # add
-    | expr (LT|LE|GT|GE) expr # compare
-    | expr (EQ|NEQ) expr      # equals
-    | expr AND expr           # and
-    | expr OR  expr           # or
+    | expr op=(STAR|DIV) expr    # mult
+    | expr op=(PLUS|MINUS) expr  # add
+    | expr op=(LT|LE|GT|GE) expr # compare
+    | expr op=(EQ|NEQ) expr      # equals
+    | expr op=AND expr           # and
+    | expr op=OR  expr           # or
     | expr AT expr            # snapshot
     | <assoc=right> expr PIPE expr          # alternate
+    | <assoc=right> expr IF expr          # filter
     | expr DOTS expr          # hold
     ;
 
@@ -83,6 +84,7 @@ NEQ        : '!=' ;
 AND        : 'and' ;
 OR         : 'or' ;
 PIPE       : '|' ;
+IF         : 'if' ;
 AT         : '@' ;
 CELL       : 'cell' ;
 STREAM     : 'stream' ;

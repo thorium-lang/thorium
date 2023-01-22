@@ -1,6 +1,10 @@
-reactor counter(click: stream unit) {
-    sum: cell int = 0 .. sum + inc;
+reactor counter(inc: stream unit,
+                dec: stream unit) {
+    value: cell int = 0 .. change;
 private:
-    inc: stream int = 1 @ click;
+    change: stream int = (value + delta) if ((value+delta >= 0) and (value+delta <= 5));
+    delta: stream int =  0 @ inc and dec
+                      |  1 @ inc
+                      | -1 @ dec;
 }
 

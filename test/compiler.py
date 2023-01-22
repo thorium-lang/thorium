@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import operator
-import sys
+import functools
 import z3
 import antlr4
 from thorium import *
@@ -11,7 +11,10 @@ def lmap(f,iterable):
 
 class Cell:
     def __init__(self, type):
-        self.type = type
+        if isinstance(type, Stream) or isinstance(type, Cell):
+            self.type = type.type
+        else:
+            self.type = type
 
     def __str__(self):
         return f'cell-{self.type}'
@@ -21,12 +24,13 @@ class Cell:
 
 class Stream:
     def __init__(self, type):
-        self.type = type
+        if isinstance(type, Stream) or isinstance(type, Cell):
+            self.type = type.type
+        else:
+            self.type = type
         self.name = self
 
     def declareZ3Constructor(self, type_ctx):
-        #type_ctx(self).declare(f'{self.type}-event', ('value',type_ctx(self.type)))
-        #type_ctx(self).declare(f'{self.type}-nothing')
         type_ctx(self).declare('event', ('value',type_ctx(self.type)))
         type_ctx(self).declare('nothing')
 
@@ -62,8 +66,15 @@ class ReactorType:
         self.subexprs_dict = {}
 
     def declareZ3Constructor(self, type_ctx):
-        arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members+self.subexprs]
+        arguments = []
+        for id in self.params+self.public_members+self.private_members+self.subexprs:
+            arguments.append((id.name, type_ctx(id.type)))
+        #arguments = [(id.name,type_ctx(id.type)) for id in self.params+self.public_members+self.private_members+self.subexprs]
         type_ctx(self.name).declare(f'{self.name}', *arguments)
+
+    def show(self, instance):
+        for i,id in enumerate(self.params+self.public_members+self.private_members+self.subexprs):
+            print(f'{id.name:>20s} : {instance.arg(i)}')
 
     def getParamType(self, i):
         return self.params[i].type
@@ -84,9 +95,9 @@ class ReactorType:
         if name in self.subexprs_dict: return self.subexprs_dict[name]
         raise Exception(f"Unknown member {name}")
 
-    def addSubExpr(self,name,type):
-        self.subexprs.append(TypedIdentifier(name,type))
-        self.subexprs_dict[name] = type
+    def addSubExpr(self,expr):
+        self.subexprs.append(TypedIdentifier(expr.member_name,expr.thorium_type))
+        self.subexprs_dict[expr.member_name] = expr.thorium_type
 
     def __str__(self):
         return self.name
@@ -158,6 +169,7 @@ class Z3Types:
 
     def finalizeDatatypes(self):
         for datatype in self.datatypes:
+            print(f'finalizing datatype {datatype}')
             datatype.declareZ3Constructor(self)
         datatype_names = [str(dt) for dt in self.datatypes]
         args = [self(name) for name in datatype_names]
@@ -235,14 +247,14 @@ class SubExprTypeCheck(ThoriumVisitor):
         [self.visit(m) for m in ctx.reactorMembers()]
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
-        ctx.expr().membername = ctx.ID().getText()
-        self.visit(ctx.expr())
+        ctx.expr().member_name = ctx.ID().getText()
+        ctx.expr().thorium_type = self.visit(ctx.expr())
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
-        ctx.expr().membername = f'{ctx.membername}-1'
-        type = self.visit(ctx.expr())
-        self.reactor.addSubExpr(ctx.expr().membername,type)
-        return type
+        ctx.expr().member_name = f'{ctx.member_name}-1'
+        ctx.expr().thorium_type = self.visit(ctx.expr())
+        self.reactor.addSubExpr(ctx.expr())
+        return ctx.expr().thorium_type
 
     def visitId(self, ctx:ThoriumParser.IdContext):
         id = ctx.ID().getText()
@@ -252,16 +264,17 @@ class SubExprTypeCheck(ThoriumVisitor):
         return 'int'
 
     def visitParen(self, ctx:ThoriumParser.ParenContext):
-        ctx.expr().membername = ctx.membername
+        ctx.expr().member_name = ctx.member_name
         return self.visit(ctx.expr())
 
     def visitSubExprs(self,ctx):
         types = []
         for i,sub in enumerate(ctx.expr()):
-            sub.membername = f'{ctx.membername}-{i+1}'
-            type = self.visit(sub)
-            types.append(type)
-            self.reactor.addSubExpr(sub.membername,type)
+            sub.member_name = f'{ctx.member_name}-{i+1}'
+            print(f'visiting {sub.member_name} {type(sub)}')
+            sub.thorium_type = self.visit(sub)
+            types.append(sub.thorium_type)
+            self.reactor.addSubExpr(sub)
         return types
 
     def visitMult(self, ctx:ThoriumParser.MultContext):
@@ -294,11 +307,13 @@ class SubExprTypeCheck(ThoriumVisitor):
         if hasStreamType(types): return Stream('bool')
         return Cell('bool')
 
+    def visitFilter(self, ctx:ThoriumParser.FilterContext):
+        valueType,conditionType = self.visitSubExprs(ctx)
+        return Stream(valueType)
+
     def visitSnapshot(self, ctx:ThoriumParser.SnapshotContext):
         cellType,streamType = self.visitSubExprs(ctx)
         #TODO: typeCheck
-        if isinstance(cellType,Cell):
-            return Stream(cellType.type)
         return Stream(cellType)
 
     def visitAlternate(self, ctx:ThoriumParser.AlternateContext):
@@ -309,169 +324,218 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitHold(self, ctx:ThoriumParser.HoldContext):
         cellType,streamType = self.visitSubExprs(ctx)
         #TODO: typeCheck (both should hold the same kind of value)
-        if isinstance(cellType,Cell):
-            return cellType
         return Cell(cellType)
 
 
+class Expr:
+    def __init__(self, trace, accessor, thorium_type, z3_type):
+        self.trace = trace
+        self.accessor = accessor
+        self.thorium_type = thorium_type
+        self.z3_type = z3_type
+
+    def isStream(self):
+        return isinstance(self.thorium_type,Stream)
+
+    def isNothing(self,k):
+        if self.isStream():
+            return self.accessor(self.trace(k)) == self.z3_type.nothing
+        return False
+
+    def setValue(self,k,value):
+        if self.isStream():
+            return self.accessor(self.trace(k)) == self.z3_type.event(value)
+        return self.accessor(self.trace(k)) == value
+
+    def getValue(self,k,snapshot=False):
+        if self.isStream():
+            return self.z3_type.value(self.accessor(self.trace(k)))
+        if snapshot:
+            return self.accessor(self.trace(k-1))
+        return self.accessor(self.trace(k))
+
+    def getExpr(self, k):
+        return self.accessor(self.trace(k))
+
 class ReactorDefiner(ThoriumVisitor):
-    #ReactorDefiner(counter_main, composite_types['counter'], composite_types, z3_types, 0, 5).run()
     def __init__(self, composite_types:dict, z3_types:Z3Types):
         ThoriumVisitor.__init__(self)
         self.solver = None
-        self.function = None
+        self.trace = None
         self.reactor_type = None
         self.first_state = None
         self.final_state = None
         self.composite_types = composite_types
         self.z3_types = z3_types
 
+        self.snapshot_trigger = False
+
+        self.operators = {'+': operator.add,
+                          '-': operator.sub,
+                          '*': operator.mul,
+                          '/': operator.truediv,
+                          '<': operator.lt,
+                          '<=': operator.le,
+                          '>': operator.gt,
+                          '>=': operator.ge,
+                          '==': operator.eq,
+                          '!=': operator.ne,
+                          'and': z3.And,
+                          'or': z3.Or,
+                          }
+
+    def apply(self, f: callable, args: List[Expr], result: Expr):
+        stream_args = [arg for arg in args if arg.isStream()]
+        if stream_args:
+            self.solver.add(result.isNothing(self.first_state))
+            for k in range(self.first_state+1, self.final_state+1):
+                print([arg.getValue(k, True) for arg in args])
+                self.solver.add(z3.If(z3.Or([arg.isNothing(k) for arg in stream_args]),
+                                      result.isNothing(k),
+                                      result.setValue(k, f(*[arg.getValue(k, True) for arg in args]))))
+        else:
+            for k in range(self.first_state, self.final_state+1):
+                self.solver.add(result.setValue(k, f(*[arg.getValue(k) for arg in args])))
+
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
-        self.function = z3.Function(name, z3.IntSort(), self.z3_reactor_type)
+        self.trace = z3.Function(name, z3.IntSort(), self.z3_reactor_type)
         self.first_state = first_state
         self.final_state = final_state
         self.solver = solver
         print(f'calling run on ReactorDefiner with type: {self.reactor_type} {type(self.reactor_type)}')
         self.visit(self.reactor_type.ctx)
-        return self.function
+        return self.trace
 
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
         print(f'ReactorDefiner visiting {ctx.ID()}')
         self.visitChildren(ctx)
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = - {ctx.expr().membername}')
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
-        expr_accessor = self.z3_reactor_type.__getattribute__(ctx.expr().membername)
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = - {ctx.expr().member_name}')
+        accessor = self.z3_reactor_type.__getattribute__(ctx.member_name)
+        expr_accessor = self.z3_reactor_type.__getattribute__(ctx.expr().member_name)
         for k in range(self.first_state, self.final_state+1):
-            self.solver.add(accessor(self.function(k)) == - expr_accessor(self.function(k)))
+            self.solver.add(accessor(self.trace(k)) == - expr_accessor(self.trace(k)))
         self.visitChildren(ctx)
 
     def visitId(self, ctx:ThoriumParser.IdContext):
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
+        accessor = self.z3_reactor_type.__getattribute__(ctx.member_name)
         id_accessor = self.z3_reactor_type.__getattribute__(ctx.ID().getText())
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.ID()}')
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.ID()}')
         for k in range(self.first_state, self.final_state+1):
-            self.solver.add(accessor(self.function(k)) == id_accessor(self.function(k)))
+            self.solver.add(accessor(self.trace(k)) == id_accessor(self.trace(k)))
         self.visitChildren(ctx)
 
     def visitNumber(self, ctx:ThoriumParser.NumberContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.NUMBER()}')
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.NUMBER()}')
         value = int(ctx.NUMBER().getText())
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
+        accessor = self.z3_reactor_type.__getattribute__(ctx.member_name)
         for k in range(self.first_state, self.final_state+1):
-            self.solver.add(accessor(self.function(k)) == value)
+            self.solver.add(accessor(self.trace(k)) == value)
         self.visitChildren(ctx)
 
+    def makeExpr(self, member_name: str):
+        thorium_type = self.reactor_type.getType(member_name)
+        return Expr(self.trace,
+                    self.z3_reactor_type.__getattribute__(member_name),
+                    thorium_type,
+                    self.z3_types(thorium_type) )
+
+    def binOp(self, ctx):
+        f = self.operators[ctx.op.text]
+        arg0 = self.makeExpr(ctx.expr(0).member_name)
+        arg1 = self.makeExpr(ctx.expr(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} {f} {ctx.expr(1).member_name}')
+        self.apply(f, [arg0, arg1], result)
+
     def visitMult(self, ctx:ThoriumParser.MultContext):
-        OP = '*'
-        if ctx.DIV(): OP = '/'
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} {OP} {ctx.expr(1).membername}')
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitAdd(self, ctx:ThoriumParser.AddContext):
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
-        arg0_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(0).membername)
-        arg1_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(1).membername)
-
-        arg0_type = self.reactor_type.getType(ctx.expr(0).membername)
-        arg1_type = self.reactor_type.getType(ctx.expr(1).membername)
-
-        z3_expr_type = self.z3_types(self.reactor_type.getType(ctx.membername))
-        z3_arg0_type = self.z3_types(self.reactor_type.getType(ctx.expr(0).membername))
-        z3_arg1_type = self.z3_types(self.reactor_type.getType(ctx.expr(1).membername))
-        f = self.function
-        OP = operator.add
-        if ctx.MINUS(): OP = operator.sub
-        if not (isinstance(arg0_type, Stream) or isinstance(arg1_type, Stream)):
-            for k in range(self.first_state, self.final_state+1):
-                self.solver.add(accessor(f(k)) == OP(arg0_accessor(f(k)), arg1_accessor(f(k))))
-        elif isinstance(arg0_type, Stream) and isinstance(arg1_type, Stream):
-            self.solver.add(accessor(f(self.first_state)) == z3_expr_type.nothing)
-            for k in range(self.first_state+1, self.final_state+1):
-                self.solver.add(accessor(f(k)) == z3.If(arg0_accessor(f(k)) == z3_arg0_type.nothing or
-                                                        arg1_accessor(f(k)) == z3_arg1_type.nothing,
-                                                        z3_expr_type.nothing,
-                                                        z3_expr_type.event(OP( z3_arg0_type.value(arg0_accessor(f(k))),
-                                                                               z3_arg1_type.value(arg1_accessor(f(k)))))))
-        elif isinstance(arg1_type, Stream):
-            self.solver.add(accessor(f(self.first_state)) == z3_expr_type.nothing)
-            print(accessor,type(accessor))
-            print(arg0_accessor)
-            print(arg1_accessor)
-            print(z3_expr_type)
-            print(z3_arg0_type)
-            print(z3_arg1_type)
-            for k in range(self.first_state+1, self.final_state+1):
-                self.solver.add(accessor(f(k)) == z3.If(arg1_accessor(f(k)) == z3_arg1_type.nothing,
-                                                        z3_expr_type.nothing,
-                                                        #z3_expr_type.event(z3_arg1_type.value(arg1_accessor(f(k))))))
-                                                        z3_expr_type.event(OP( arg0_accessor(f(k-1)),
-                                                                               z3_arg1_type.value(arg1_accessor(f(k)))))))
-        elif isinstance(arg0_type, Stream):
-            self.solver.add(accessor(f(self.first_state)) == z3_expr_type.nothing)
-            for k in range(self.first_state+1, self.final_state+1):
-                self.solver.add(accessor(f(k)) == z3.If( arg0_accessor(f(k)) == z3_arg0_type.nothing,
-                                                         z3_expr_type.nothing,
-                                                         z3_expr_type.event(OP( z3_arg0_type.value(arg0_accessor(f(k))),
-                                                                                arg1_accessor(f(k-1))))))
-
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} {OP} {ctx.expr(1).membername}')
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitCompare(self, ctx:ThoriumParser.CompareContext):
-        OP = '<'
-        if ctx.LE(): '<='
-        if ctx.GT(): '>'
-        if ctx.GE(): '>='
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} {OP} {ctx.expr(1).membername}')
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitEquals(self, ctx:ThoriumParser.EqualsContext):
-        OP = '=='
-        if ctx.NEQ(): '!='
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} {OP} {ctx.expr(1).membername}')
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitAnd(self, ctx:ThoriumParser.AndContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} and {ctx.expr(1).membername}')
+        print(f'visitAnd snapshot_trigger {self.snapshot_trigger}')
+        if self.snapshot_trigger:
+            arg0 = self.makeExpr(ctx.expr(0).member_name)
+            arg1 = self.makeExpr(ctx.expr(1).member_name)
+            result = self.makeExpr(ctx.member_name)
+            for k in range(self.first_state, self.final_state+1):
+                self.solver.add(z3.If(z3.Or(arg0.isNothing(k),arg1.isNothing(k)),
+                                      result.isNothing(k),
+                                      result.setValue(k, True)))
+
+        else:
+            self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitOr(self, ctx:ThoriumParser.AndContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} or {ctx.expr(1).membername}')
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitSnapshot(self, ctx:ThoriumParser.SnapshotContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} @ {ctx.expr(1).membername}')
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
-        cell_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(0).membername)
-        stream_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(1).membername)
-        snap_type = self.z3_types(self.reactor_type.getType(ctx.membername))
-        stream_type = self.z3_types(self.reactor_type.getType(ctx.expr(1).membername))
-        self.solver.add(accessor(self.function(self.first_state)) == snap_type.nothing)
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} @ {ctx.expr(1).member_name}')
+        cell = self.makeExpr(ctx.expr(0).member_name)
+        stream = self.makeExpr(ctx.expr(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+
+        self.solver.add(result.isNothing(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
-            self.solver.add(accessor(self.function(k)) == z3.If(stream_accessor(self.function(k))==stream_type.nothing,
-                                                                snap_type.nothing,
-                                                                snap_type.event(cell_accessor(self.function(k-1)))))
-        self.visitChildren(ctx)
+            self.solver.add(z3.If(stream.isNothing(k),
+                                  result.isNothing(k),
+                                  result.setValue(k, cell.getValue(k-1))))
+        self.visit(ctx.expr(0))
+        self.snapshot_trigger = True
+        self.visit(ctx.expr(1))
+        self.snapshot_trigger = False
 
     def visitAlternate(self, ctx:ThoriumParser.AlternateContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} | {ctx.expr(1).membername}')
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} | {ctx.expr(1).member_name}')
+        altA = self.makeExpr(ctx.expr(0).member_name)
+        altB = self.makeExpr(ctx.expr(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+        for k in range(self.first_state,self.final_state+1):
+            self.solver.add(result.getExpr(k) == z3.If(altA.isNothing(k),
+                                                       altB.getExpr(k),
+                                                       altA.getExpr(k)))
+        self.visitChildren(ctx)
+
+    def visitFilter(self, ctx:ThoriumParser.FilterContext):
+        value = self.makeExpr(ctx.expr(0).member_name)
+        condition = self.makeExpr(ctx.expr(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+
+        for k in range(self.first_state,self.final_state+1):
+            self.solver.add(z3.If(condition.isNothing(k),
+                                  result.isNothing(k),
+                                  z3.If(condition.getValue(k, True),
+                                        result.setValue(k, value.getValue(k)),
+                                        result.isNothing(k))))
         self.visitChildren(ctx)
 
     def visitHold(self, ctx:ThoriumParser.HoldContext):
-        print(f'Reactor {self.reactor_type}, {ctx.membername} = {ctx.expr(0).membername} .. {ctx.expr(1).membername}')
-        accessor = self.z3_reactor_type.__getattribute__(ctx.membername)
-        cell_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(0).membername)
-        stream_accessor = self.z3_reactor_type.__getattribute__(ctx.expr(1).membername)
-        stream_type = self.z3_types(self.reactor_type.getType(ctx.expr(1).membername))
-        self.solver.add(accessor(self.function(0)) == cell_accessor(self.function(0)))
+        print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} .. {ctx.expr(1).member_name}')
+        init = self.makeExpr(ctx.expr(0).member_name)
+        update = self.makeExpr(ctx.expr(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+        self.solver.add(result.getExpr(self.first_state) == init.getExpr(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
-            self.solver.add(accessor(self.function(k)) == z3.If(stream_accessor(self.function(k))==stream_type.nothing,
-                                                                accessor(self.function(k-1)),
-                                                                stream_type.value(stream_accessor(self.function(k)))))
+            self.solver.add(result.getExpr(k) == z3.If(update.isNothing(k),
+                                                       result.getExpr(k-1),
+                                                       update.getValue(k)))
         self.visitChildren(ctx)
 
 
@@ -564,11 +628,13 @@ def main(argv):
 
     reactor_definer = ReactorDefiner(composite_types, z3_types)
 
+    thorium_counter = composite_types['counter']
+
     solver = z3.Solver()
-    counter_main = reactor_definer('counter-main', 'counter', 0, 5, solver)
+    counter_main = reactor_definer('counter-main', 'counter', 0, 10, solver)
 
     Counter = z3_types('counter')
-    solver.add(Counter.sum(counter_main(5))==4)
+    solver.add(z3.Not(z3.And(*[Counter.value(counter_main(k))<=5 for k in range(0,11)])))
 
     print(f'check returned {solver.check()}')
     print(solver.model())
@@ -576,11 +642,13 @@ def main(argv):
     solution = solver.model()[counter_main]
     #help(solution)
     f = {a.as_long():b for a,b in solution.as_list()[:-1]}
-    for k in range(6):
+    for k in range(11):
         if k in f:
-            print(f[k])
+            print(f'{k} -> ')
+            thorium_counter.show(f[k])
         else:
-            print(solution.else_value())
+            print(f'{k} -> ')
+            thorium_counter.show(solution.else_value())
     #help(list(f.keys())[0])
     #print(solver.model()[counter_main].entry(0))
 
