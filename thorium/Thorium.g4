@@ -4,12 +4,25 @@ prog: decl*;
 
 decl: struct
     | enum
+    | function
     | reactor
     ;
 
 struct: STRUCT ID LBRACE structMembers? RBRACE ;
 
 enum:     ENUM ID LBRACE enumMembers? RBRACE ;
+
+function: FUNCTION ID LPAREN functionParams? RPAREN '->' functionParam LBRACE
+    functionProperties?
+RBRACE;
+
+functionParams: functionParam (COMMA functionParam)* ;
+
+functionParam: ID COLON type;
+
+functionProperties: functionProperty (SEMI functionProperty)* SEMI? ;
+
+functionProperty: expr;
 
 reactor: REACTOR ID reactorParams? LBRACE 
     reactorMembers?
@@ -27,7 +40,9 @@ reactorMembers: reactorMember (SEMI reactorMember)* SEMI?;
 
 reactorMember: ID COLON reactiveType EQUALS expr;
 
-reactorProperties: expr (SEMI expr)* ;
+reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
+
+reactorProperty: ID COLON property;
 
 structMembers: structMember (COMMA structMember)* ;
 
@@ -42,21 +57,45 @@ reactiveType: (CELL|STREAM) type;
 
 type : ID ;
 
+property:
+          ltlProperty
+//        | quantProperty
+        ;
+
+ltlProperty:
+      NOT ltlProperty                               # ltlNegation
+    | LPAREN ltlProperty RPAREN                     # ltlParen
+    | GLOBALLY ltlProperty                          # ltlGlobally
+    | EVENTUALLY ltlProperty                        # ltlEventually
+    | <assoc=right> ltlProperty AND ltlProperty     # ltlAnd
+    | <assoc=right> ltlProperty OR ltlProperty      # ltlOr
+    | <assoc=right> ltlProperty IMPLIES ltlProperty # ltlImplication
+    | expr                                          # ltlExpr
+    ;
+
+//quantProperty:
+//      FORALL ID (COMMA ID)* quantProperty # forall
+//      EXISTS ID (COMMA ID)* quantProperty # exists
+//    | expr
+//    ;
+
 expr:
-      MINUS expr              # negative
-    | ID                      # id
-    | NUMBER                  # number
-    | LPAREN expr RPAREN      # paren
+      op=MINUS expr              # negative
+    | ID                         # id
+    | NUMBER                     # number
+    | STAR expr STAR             # changes
+    | LPAREN expr RPAREN         # paren
     | expr op=(STAR|DIV) expr    # mult
     | expr op=(PLUS|MINUS) expr  # add
     | expr op=(LT|LE|GT|GE) expr # compare
     | expr op=(EQ|NEQ) expr      # equals
+    | op=NOT expr                # not
     | expr op=AND expr           # and
     | expr op=OR  expr           # or
-    | expr AT expr            # snapshot
-    | <assoc=right> expr PIPE expr          # alternate
-    | <assoc=right> expr IF expr          # filter
-    | expr DOTS expr          # hold
+    | expr AT expr               # snapshot
+    | <assoc=right> expr IF expr   # filter
+    | <assoc=right> expr PIPE expr # alternate
+    | expr DOTS expr               # hold
     ;
 
 LPAREN     : '(' ;
@@ -86,14 +125,21 @@ OR         : 'or' ;
 PIPE       : '|' ;
 IF         : 'if' ;
 AT         : '@' ;
+NOT        : 'not' ;
+GLOBALLY   : 'G' ;
+EVENTUALLY : 'F' ;
+IMPLIES    : '->' ;
+FORALL     : 'forall' ;
+EXISTS     : 'exists' ;
 CELL       : 'cell' ;
 STREAM     : 'stream' ;
 STRUCT     : 'struct' ;
 ENUM       : 'enum' ;
 REACTOR    : 'reactor' ;
+FUNCTION   : 'function' ;
 PRIVATE    : 'private:' ;
 PROPERTIES : 'properties:' ;
-WS         : [ \r\n\t]+ -> skip;
+WS         : [ \r\n\t]+ -> skip ;
 
 fragment ALPHA    : [a-zA-Z_]    ;
 fragment ALPHANUM : [a-zA-Z_0-9] ;
@@ -101,3 +147,6 @@ fragment NUM : [0-9] ;
 
 ID : ALPHA ALPHANUM* ;
 NUMBER : NUM+ ;
+
+COMMENT    : '/*' .*? '*/' -> skip ;
+LINE_COMMENT : '//' ~[\r\n]* -> skip ;

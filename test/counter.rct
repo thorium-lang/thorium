@@ -1,10 +1,39 @@
+/*
 reactor counter(inc: stream unit,
                 dec: stream unit) {
-    value: cell int = 0 .. change;
+    value: cell int = min .. change if min<=change and change<=max;
+    min: cell int = 0;
+    max: cell int = 10;
 private:
-    change: stream int = (value + delta) if ((value+delta >= 0) and (value+delta <= 5));
+    change: stream int = (value + delta);
+    //change: stream int = (value + delta) if (min <= value+delta) and (value+delta <= max);
     delta: stream int =  0 @ inc and dec
                       |  1 @ inc
                       | -1 @ dec;
+properties:
+    bounded:  G ((min <= value) and (value <= max));
+    stuck: (G not inc) -> (G (value == 0))
+}
+*/
+reactor counter(inc: stream unit,
+                dec: stream unit,
+                min: cell int,
+                max: cell int) {
+    value: cell int = min .. change;
+private:
+    change: stream int = delta if delta >= current_min and delta <= current_max
+                       | *max* if *max* < value
+                       | *min* if *min* > value;
+
+    delta: stream int =  value @ inc and dec
+                      |  value+1 @ inc
+                      |  value-1 @ dec;
+
+    current_min:stream int = *min* | min @ inc or dec;
+    current_max:stream int = *max* | max @ inc or dec;
+properties:
+    bounded: G ((0 <= min) and (min <= max) and (max <= 5)) -> G ((min <= value) and (value <= max));
+    //stuck: (G not inc) -> (G (value == 0))
+    //stuck: (Henceforth not inc) -> Henceforth (value == 0)
 }
 
