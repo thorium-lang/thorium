@@ -528,7 +528,7 @@ class ReactorDefiner(ThoriumVisitor):
         id = self.makeExpr(ctx.ID().getText())
         result = self.makeExpr(ctx.member_name)
         for k in range(self.first_state, self.final_state+1):
-            self.solver.add(result.setValue(k,id.getValue(k)))
+            self.solver.add(result.getExpr(k) == id.getExpr(k))
         self.visitChildren(ctx)
 
     def visitNumber(self, ctx:ThoriumParser.NumberContext):
@@ -575,6 +575,17 @@ class ReactorDefiner(ThoriumVisitor):
             self.solver.add(z3.If(arg.isNothing(k),
                                   result.setValue(k,False),
                                   result.setValue(k,z3.And(arg.getValue(k), result.getValue(k+1)))))
+        self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
+        self.visitChildren(ctx)
+
+    def visitLtlEventually(self, ctx:ThoriumParser.LtlEventuallyContext):
+        #print(f'Reactor {self.reactor_type}, {ctx.member_name} = globally {ctx.ltlProperty().member_name}')
+        arg = self.makeExpr(ctx.ltlProperty().member_name)
+        result = self.makeExpr(ctx.member_name)
+        for k in range(self.first_state,self.final_state+1):
+            self.solver.add(z3.If(arg.isNothing(k),
+                                  result.setValue(k,False),
+                                  result.setValue(k,z3.Or(arg.getValue(k), result.getValue(k+1)))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
         self.visitChildren(ctx)
 
