@@ -67,6 +67,7 @@ ltlProperty:
     | LPAREN ltlProperty RPAREN                     # ltlParen
     | GLOBALLY ltlProperty                          # ltlGlobally
     | EVENTUALLY ltlProperty                        # ltlEventually
+    | ltlProperty UNTIL ltlProperty                 # ltlUntil
     | <assoc=right> ltlProperty AND ltlProperty     # ltlAnd
     | <assoc=right> ltlProperty OR ltlProperty      # ltlOr
     | <assoc=right> ltlProperty IMPLIES ltlProperty # ltlImplication
@@ -128,6 +129,7 @@ AT         : '@' ;
 NOT        : 'not' ;
 GLOBALLY   : 'G' ;
 EVENTUALLY : 'F' ;
+UNTIL      : 'U' ;
 IMPLIES    : '->' ;
 FORALL     : 'forall' ;
 EXISTS     : 'exists' ;

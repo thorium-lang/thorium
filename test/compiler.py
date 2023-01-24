@@ -42,7 +42,7 @@ class Stream:
         return f'stream-{self.type}'
 
     def __eq__(self, other):
-        return self.type == other.type
+        return isinstance(other,Stream) and (self.type == other.type)
 
 class TypedIdentifier:
     def __init__(self, name, type):
@@ -320,6 +320,10 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.visitSubExpr(ctx,ctx.ltlProperty())
         return Cell('bool')
 
+    def visitLtlUntil(self, ctx:ThoriumParser.LtlUntilContext):
+        self.visitSubExprs(ctx,ctx.ltlProperty())
+        return Cell('bool')
+
     def visitLtlAnd(self, ctx:ThoriumParser.LtlAndContext):
         self.visitSubExprs(ctx,ctx.ltlProperty())
         return Cell('bool')
@@ -450,12 +454,19 @@ class Expr:
             return self.accessor(self.trace(k)) == self.z3_type.nothing
         return False
 
+    def isTrue(self,k):
+        if self.isStream():
+            return z3.If(self.isNothing(k), False, self.getValue(k))
+        return self.getValue(k)
+
     def setValue(self,k,value):
         if self.isStream():
             return self.accessor(self.trace(k)) == self.z3_type.event(value)
         return self.accessor(self.trace(k)) == value
 
     def getValue(self,k,snapshot=False):
+        if self.thorium_type == Stream('unit'):
+            return z3.Not(self.isNothing(k))
         if self.isStream():
             return self.z3_type.value(self.accessor(self.trace(k)))
         if snapshot:
@@ -555,15 +566,8 @@ class ReactorDefiner(ThoriumVisitor):
         result = self.makeExpr(ctx.member_name)
         #print(result.thorium_type)
         #print(arg.thorium_type)
-        if arg.thorium_type == Stream('unit'):
-            #print('******************************** stream-unit')
-            for k in range(self.first_state,self.final_state+1):
-                self.solver.add(result.setValue(k,arg.isNothing(k)))
-        else:
-            for k in range(self.first_state,self.final_state+1):
-                self.solver.add(z3.If(arg.isNothing(k),
-                                      result.setValue(k,True),
-                                      result.setValue(k,z3.Not(arg.getValue(k)))))
+        for k in range(self.first_state,self.final_state+1):
+            self.solver.add(result.setValue(k, z3.Not(arg.isTrue(k))))
         self.visitChildren(ctx)
 
 
@@ -572,9 +576,7 @@ class ReactorDefiner(ThoriumVisitor):
         arg = self.makeExpr(ctx.ltlProperty().member_name)
         result = self.makeExpr(ctx.member_name)
         for k in range(self.first_state,self.final_state+1):
-            self.solver.add(z3.If(arg.isNothing(k),
-                                  result.setValue(k,False),
-                                  result.setValue(k,z3.And(arg.getValue(k), result.getValue(k+1)))))
+            self.solver.add(result.setValue(k, z3.And(arg.isTrue(k), result.getValue(k+1))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
         self.visitChildren(ctx)
 
@@ -583,9 +585,16 @@ class ReactorDefiner(ThoriumVisitor):
         arg = self.makeExpr(ctx.ltlProperty().member_name)
         result = self.makeExpr(ctx.member_name)
         for k in range(self.first_state,self.final_state+1):
-            self.solver.add(z3.If(arg.isNothing(k),
-                                  result.setValue(k,False),
-                                  result.setValue(k,z3.Or(arg.getValue(k), result.getValue(k+1)))))
+            self.solver.add(result.setValue(k,z3.Or(arg.isTrue(k),result.getValue(k+1))))
+        self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
+        self.visitChildren(ctx)
+
+    def visitLtlUntil(self, ctx:ThoriumParser.LtlUntilContext):
+        arg0 = self.makeExpr(ctx.ltlProperty(0).member_name)
+        arg1 = self.makeExpr(ctx.ltlProperty(1).member_name)
+        result = self.makeExpr(ctx.member_name)
+        for k in range(self.first_state,self.final_state+1):
+            self.solver.add(result.setValue(k, z3.Or(arg1.isTrue(k),z3.And(arg0.isTrue(k),result.getValue(k+1)))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
         self.visitChildren(ctx)
 
