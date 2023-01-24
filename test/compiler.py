@@ -42,7 +42,7 @@ class Stream:
         return f'stream-{self.type}'
 
     def __eq__(self, other):
-        return isinstance(other,Stream) and (self.type == other.type)
+        return isinstance(other, Stream) and (self.type == other.type)
 
 class TypedIdentifier:
     def __init__(self, name, type):
@@ -439,42 +439,42 @@ class SubExprTypeCheck(ThoriumVisitor):
         return Cell(cellType)
 
 
-class Expr:
+class ReactiveValue:
     def __init__(self, trace, accessor, thorium_type, z3_type):
         self.trace = trace
         self.accessor = accessor
         self.thorium_type = thorium_type
         self.z3_type = z3_type
 
+    def __call__(self,k):
+        return self.accessor(self.trace(k))
+
     def isStream(self):
         return isinstance(self.thorium_type,Stream)
 
-    def isNothing(self,k):
+    def isNothing(self, k):
         if self.isStream():
-            return self.accessor(self.trace(k)) == self.z3_type.nothing
+            return self(k) == self.z3_type.nothing
         return False
 
-    def isTrue(self,k):
+    def isTrue(self, k):
         if self.isStream():
             return z3.If(self.isNothing(k), False, self.getValue(k))
-        return self.getValue(k)
+        return self(k)
 
-    def setValue(self,k,value):
+    def setValue(self, k, value):
         if self.isStream():
-            return self.accessor(self.trace(k)) == self.z3_type.event(value)
-        return self.accessor(self.trace(k)) == value
+            return self(k) == self.z3_type.event(value)
+        return self(k) == value
 
-    def getValue(self,k,snapshot=False):
+    def getValue(self, k, snapshot=False):
         if self.thorium_type == Stream('unit'):
             return z3.Not(self.isNothing(k))
         if self.isStream():
-            return self.z3_type.value(self.accessor(self.trace(k)))
+            return self.z3_type.value(self(k))
         if snapshot:
-            return self.accessor(self.trace(k-1))
-        return self.accessor(self.trace(k))
-
-    def getExpr(self, k):
-        return self.accessor(self.trace(k))
+            return self(k-1)
+        return self(k)
 
 
 class ReactorDefiner(ThoriumVisitor):
@@ -506,18 +506,31 @@ class ReactorDefiner(ThoriumVisitor):
                           'or': z3.Or,
                           }
 
-    def apply(self, f: callable, args: List[Expr], result: Expr):
+    def all_states(self):
+        return range(self.first_state,self.final_state+1)
+
+    def active_states(self):
+        return range(self.first_state+1,self.final_state+1)
+
+    def Assert(self,statement):
+        self.solver.add(statement)
+
+    def apply(self, f: callable,
+                    args: List[ReactiveValue],
+                    result: ReactiveValue):
         stream_args = [arg for arg in args if arg.isStream()]
         if stream_args:
-            self.solver.add(result.isNothing(self.first_state))
-            for k in range(self.first_state+1, self.final_state+1):
-                #print([arg.getValue(k, True) for arg in args])
-                self.solver.add(z3.If(z3.Or(*[arg.isNothing(k) for arg in stream_args]),
+            self.Assert(result.isNothing(self.first_state))
+            for k in self.active_states():
+                missing_args = z3.Or(*[arg.isNothing(k) for arg in stream_args])
+                values = [arg.getValue(k, True) for arg in args]
+                self.solver.add(z3.If(missing_args,
                                       result.isNothing(k),
-                                      result.setValue(k, f(*[arg.getValue(k, True) for arg in args]))))
+                                      result.setValue(k, f(*values))))
         else:
-            for k in range(self.first_state, self.final_state+1):
-                self.solver.add(result.setValue(k, f(*[arg.getValue(k) for arg in args])))
+            for k in self.all_states():
+                values = [arg.getValue(k) for arg in args]
+                self.solver.add(result.setValue(k, f(*values)))
 
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
         self.reactor_type = self.composite_types[typename]
@@ -536,10 +549,10 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitId(self, ctx:ThoriumParser.IdContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.ID()}')
-        id = self.makeExpr(ctx.ID().getText())
-        result = self.makeExpr(ctx.member_name)
+        id = self[ctx.ID().getText()]
+        result = self[ctx.member_name]
         for k in range(self.first_state, self.final_state+1):
-            self.solver.add(result.getExpr(k) == id.getExpr(k))
+            self.solver.add(result(k) == id(k))
         self.visitChildren(ctx)
 
     def visitNumber(self, ctx:ThoriumParser.NumberContext):
@@ -550,20 +563,20 @@ class ReactorDefiner(ThoriumVisitor):
             self.solver.add(accessor(self.trace(k)) == value)
         self.visitChildren(ctx)
 
-    def makeExpr(self, member_name: str):
+    def __getitem__(self, member_name: str):
         if self.reactor_type.hasMember(member_name):
             thorium_type = self.reactor_type.getType(member_name)
-            return Expr(self.trace,
-                        self.z3_reactor_type.__getattribute__(member_name),
-                        thorium_type,
-                        self.z3_types(thorium_type) )
+            return ReactiveValue(self.trace,
+                                 self.z3_reactor_type.__getattribute__(member_name),
+                                 thorium_type,
+                                 self.z3_types(thorium_type) )
         else:
             return Const()
 
     def visitLtlNegation(self, ctx:ThoriumParser.LtlNegationContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = not {ctx.ltlProperty().member_name}')
-        arg = self.makeExpr(ctx.ltlProperty().member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg = self[ctx.ltlProperty().member_name]
+        result = self[ctx.member_name]
         #print(result.thorium_type)
         #print(arg.thorium_type)
         for k in range(self.first_state,self.final_state+1):
@@ -573,8 +586,8 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitLtlGlobally(self, ctx:ThoriumParser.LtlGloballyContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = globally {ctx.ltlProperty().member_name}')
-        arg = self.makeExpr(ctx.ltlProperty().member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg = self[ctx.ltlProperty().member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(result.setValue(k, z3.And(arg.isTrue(k), result.getValue(k+1))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
@@ -582,17 +595,17 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitLtlEventually(self, ctx:ThoriumParser.LtlEventuallyContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = globally {ctx.ltlProperty().member_name}')
-        arg = self.makeExpr(ctx.ltlProperty().member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg = self[ctx.ltlProperty().member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(result.setValue(k,z3.Or(arg.isTrue(k),result.getValue(k+1))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
         self.visitChildren(ctx)
 
     def visitLtlUntil(self, ctx:ThoriumParser.LtlUntilContext):
-        arg0 = self.makeExpr(ctx.ltlProperty(0).member_name)
-        arg1 = self.makeExpr(ctx.ltlProperty(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg0 = self[ctx.ltlProperty(0).member_name]
+        arg1 = self[ctx.ltlProperty(1).member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(result.setValue(k, z3.Or(arg1.isTrue(k),z3.And(arg0.isTrue(k),result.getValue(k+1)))))
         self.solver.add(result.setValue(self.final_state+1, True)) # optimistic semantics
@@ -604,9 +617,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitLtlAnd(self, ctx:ThoriumParser.LtlAndContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.ltlProperty(0).member_name} and {ctx.ltlProperty(1).member_name}')
-        arg0 = self.makeExpr(ctx.ltlProperty(0).member_name)
-        arg1 = self.makeExpr(ctx.ltlProperty(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg0 = self[ctx.ltlProperty(0).member_name]
+        arg1 = self[ctx.ltlProperty(1).member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(z3.If(z3.Or(arg0.isNothing(k),arg1.isNothing(k)),
                                   result.setValue(k,False),
@@ -615,9 +628,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitLtlImplication(self, ctx:ThoriumParser.LtlImplicationContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.ltlProperty(0).member_name} -> {ctx.ltlProperty(1).member_name}')
-        arg0 = self.makeExpr(ctx.ltlProperty(0).member_name)
-        arg1 = self.makeExpr(ctx.ltlProperty(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg0 = self[ctx.ltlProperty(0).member_name]
+        arg1 = self[ctx.ltlProperty(1).member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(z3.If(arg0.isNothing(k),
                                   result.setValue(k,True),
@@ -627,16 +640,16 @@ class ReactorDefiner(ThoriumVisitor):
     def unaryOp(self, ctx):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {f} {ctx.expr().member_name}')
         f = self.unary_operators[ctx.op.text]
-        arg0 = self.makeExpr(ctx.expr().member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg0 = self[ctx.expr().member_name]
+        result = self[ctx.member_name]
         self.apply(f, [arg0], result)
 
     def binOp(self, ctx):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} {f} {ctx.expr(1).member_name}')
         f = self.operators[ctx.op.text]
-        arg0 = self.makeExpr(ctx.expr(0).member_name)
-        arg1 = self.makeExpr(ctx.expr(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        arg0 = self[ctx.expr(0).member_name]
+        arg1 = self[ctx.expr(1).member_name]
+        result = self[ctx.member_name]
         self.apply(f, [arg0, arg1], result)
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
@@ -644,8 +657,8 @@ class ReactorDefiner(ThoriumVisitor):
         self.visitChildren(ctx)
 
     def visitChanges(self, ctx:ThoriumParser.ChangesContext):
-        expr = self.makeExpr(ctx.expr().member_name)
-        result = self.makeExpr(ctx.member_name)
+        expr = self[ctx.expr().member_name]
+        result = self[ctx.member_name]
         self.solver.add(result.isNothing(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
             self.solver.add(z3.If(expr.getValue(k) != expr.getValue(k-1),
@@ -672,8 +685,8 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitNot(self, ctx:ThoriumParser.NotContext):
         if self.snapshot_trigger:
-            arg = self.makeExpr(ctx.expr().member_name)
-            result = self.makeExpr(ctx.member_name)
+            arg = self[ctx.expr().member_name]
+            result = self[ctx.member_name]
             for k in range(self.first_state, self.final_state+1):
                 self.solver.add(arg.isNothing(),
                                 result.setValue(k,True),
@@ -684,9 +697,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitAnd(self, ctx:ThoriumParser.AndContext):
         if self.snapshot_trigger:
-            arg0 = self.makeExpr(ctx.expr(0).member_name)
-            arg1 = self.makeExpr(ctx.expr(1).member_name)
-            result = self.makeExpr(ctx.member_name)
+            arg0 = self[ctx.expr(0).member_name]
+            arg1 = self[ctx.expr(1).member_name]
+            result = self[ctx.member_name]
             #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} and {ctx.expr(1).member_name} (snapshot trigger)')
             for k in range(self.first_state, self.final_state+1):
                 self.solver.add(z3.If(z3.Or(arg0.isNothing(k),arg1.isNothing(k)),
@@ -699,9 +712,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitOr(self, ctx:ThoriumParser.AndContext):
         if self.snapshot_trigger:
-            arg0 = self.makeExpr(ctx.expr(0).member_name)
-            arg1 = self.makeExpr(ctx.expr(1).member_name)
-            result = self.makeExpr(ctx.member_name)
+            arg0 = self[ctx.expr(0).member_name]
+            arg1 = self[ctx.expr(1).member_name]
+            result = self[ctx.member_name]
             for k in range(self.first_state, self.final_state+1):
                 self.solver.add(z3.If(z3.And(arg0.isNothing(k),arg1.isNothing(k)),
                                       result.isNothing(k),
@@ -713,9 +726,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitSnapshot(self, ctx:ThoriumParser.SnapshotContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} @ {ctx.expr(1).member_name}')
-        cell = self.makeExpr(ctx.expr(0).member_name)
-        stream = self.makeExpr(ctx.expr(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        cell = self[ctx.expr(0).member_name]
+        stream = self[ctx.expr(1).member_name]
+        result = self[ctx.member_name]
 
         self.solver.add(result.isNothing(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
@@ -729,19 +742,19 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitAlternate(self, ctx:ThoriumParser.AlternateContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} | {ctx.expr(1).member_name}')
-        altA = self.makeExpr(ctx.expr(0).member_name)
-        altB = self.makeExpr(ctx.expr(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        altA = self[ctx.expr(0).member_name]
+        altB = self[ctx.expr(1).member_name]
+        result = self[ctx.member_name]
         for k in range(self.first_state,self.final_state+1):
-            self.solver.add(result.getExpr(k) == z3.If(altA.isNothing(k),
-                                                       altB.getExpr(k),
-                                                       altA.getExpr(k)))
+            self.solver.add(result(k) == z3.If(altA.isNothing(k),
+                                               altB(k),
+                                               altA(k)))
         self.visitChildren(ctx)
 
     def visitFilter(self, ctx:ThoriumParser.FilterContext):
-        value = self.makeExpr(ctx.expr(0).member_name)
-        condition = self.makeExpr(ctx.expr(1).member_name)
-        result = self.makeExpr(ctx.member_name)
+        value = self[ctx.expr(0).member_name]
+        condition = self[ctx.expr(1).member_name]
+        result = self[ctx.member_name]
 
         for k in range(self.first_state,self.final_state+1):
             self.solver.add(z3.If(condition.isNothing(k),
@@ -753,14 +766,14 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitHold(self, ctx:ThoriumParser.HoldContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} .. {ctx.expr(1).member_name}')
-        init = self.makeExpr(ctx.expr(0).member_name)
-        update = self.makeExpr(ctx.expr(1).member_name)
-        result = self.makeExpr(ctx.member_name)
-        self.solver.add(result.getExpr(self.first_state) == init.getExpr(self.first_state))
+        init = self[ctx.expr(0).member_name]
+        update = self[ctx.expr(1).member_name]
+        result = self[ctx.member_name]
+        self.solver.add(result(self.first_state) == init(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
-            self.solver.add(result.getExpr(k) == z3.If(update.isNothing(k),
-                                                       result.getExpr(k-1),
-                                                       update.getValue(k)))
+            self.solver.add(result(k) == z3.If(update.isNothing(k),
+                                               result(k-1),
+                                               update.getValue(k)))
         self.visitChildren(ctx)
 
 
