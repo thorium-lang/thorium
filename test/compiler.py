@@ -44,6 +44,7 @@ class Stream:
     def __eq__(self, other):
         return isinstance(other, Stream) and (self.type == other.type)
 
+
 class TypedIdentifier:
     def __init__(self, name, type):
         self.name = name
@@ -51,6 +52,106 @@ class TypedIdentifier:
 
     def __repr__(self):
         return f'{self.name} : {self.type}'
+
+
+class Function(ThoriumVisitor):
+    def __init__(self, ctx:ThoriumParser.FunctionContext):
+        self.visit(ctx)
+        self.solver = None
+        self.unary_operators = {'-': operator.neg,
+                                'not': operator.not_}
+        self.operators = {'+': operator.add,
+                          '-': operator.sub,
+                          '*': operator.mul,
+                          '/': operator.truediv,
+                          '<': operator.lt,
+                          '<=': operator.le,
+                          '>': operator.gt,
+                          '>=': operator.ge,
+                          '==': operator.eq,
+                          '!=': operator.ne,
+                          '->': z3.Implies,
+                          'and': z3.And,
+                          'or': z3.Or,
+                          }
+
+    def unaryOp(self, ctx):
+        #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {f} {ctx.expr().member_name}')
+        f = self.unary_operators[ctx.op.text]
+        arg = self.visit(ctx.expr())
+        return f(arg)
+
+    def binOp(self, ctx):
+        #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} {f} {ctx.expr(1).member_name}')
+        f = self.operators[ctx.op.text]
+        arg0 = self.visit(ctx.expr(0))
+        arg1 = self.visit(ctx.expr(1))
+        return f(arg0,arg1)
+
+    def setSolver(self, solver):
+        self.solver = solver
+
+    def __call__(self, *args):
+        self.symbols = {p.name: a for p, a in zip(self.params, args)}
+        self.symbols['result'] = self.f(*args)
+        self.visit(self.properties)
+        return self.f(*args)
+
+    def visitFunction(self, ctx:ThoriumParser.FunctionContext):
+        self.name = ctx.ID().getText()
+        self.params = self.visit(ctx.functionParams())
+        self.result_type = self.visit(ctx.type_())
+        self.properties = ctx.functionProperties()
+
+    def setTypeContext(self, z3_types):
+        args = [self.name] + [z3_types(param.type) for param in self.params] + [z3_types(self.result_type)]
+        self.f = z3.Function(*args)
+
+    def visitFunctionParams(self, ctx:ThoriumParser.FunctionParamsContext):
+        return [self.visit(param) for param in ctx.functionParam()]
+
+    def visitFunctionParam(self, ctx:ThoriumParser.FunctionParamContext):
+        return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.type_()))
+
+    def visitType(self, ctx:ThoriumParser.TypeContext):
+        return ctx.ID().getText()
+
+    def visitFunctionProperty(self, ctx:ThoriumParser.FunctionPropertyContext):
+        self.solver.add(self.visit(ctx.expr()))
+
+    def visitId(self, ctx:ThoriumParser.IdContext):
+        return self.symbols[ctx.ID().getText()]
+
+    def visitNumber(self, ctx:ThoriumParser.NumberContext):
+        return int(ctx.NUMBER())
+
+    def visitParen(self, ctx:ThoriumParser.ParenContext):
+        return self.visit(ctx.expr())
+
+
+    def visitMult(self, ctx:ThoriumParser.MultContext):
+        return self.binOp(ctx)
+
+    def visitAdd(self, ctx:ThoriumParser.AddContext):
+        return self.binOp(ctx)
+
+    def visitCompare(self, ctx:ThoriumParser.CompareContext):
+        return self.binOp(ctx)
+
+    def visitEquals(self, ctx:ThoriumParser.EqualsContext):
+        return self.binOp(ctx)
+
+    def visitNot(self, ctx:ThoriumParser.NotContext):
+        return self.unaryOp(ctx)
+
+    def visitAnd(self, ctx:ThoriumParser.AndContext):
+        return self.binOp(ctx)
+
+    def visitOr(self, ctx:ThoriumParser.AndContext):
+        return self.binOp(ctx)
+
+    def visitImplication(self, ctx:ThoriumParser.ImplicationContext):
+        return self.binOp(ctx)
 
 class ReactorType:
     def __init__(self, ctx:ThoriumParser.ReactorContext,
@@ -205,15 +306,21 @@ class Z3Types:
         self.types.update(
             {name:datatype for name,datatype in zip(datatype_names, datatypes)})
 
+def nonNone(l):
+    return [i for i in l if i!=None]
 
-class CompositeTypes(ThoriumVisitor):
+class Declarations(ThoriumVisitor):
     def visitProg(self, ctx:ThoriumParser.ProgContext):
-        return lmap(self.visit, ctx.decl())
+        return nonNone(lmap(self.visit, ctx.decl()))
 
     def visitDecl(self, ctx:ThoriumParser.DeclContext):
         if ctx.enum(): return self.visit(ctx.enum())
         if ctx.struct(): return self.visit(ctx.struct())
         if ctx.reactor(): return self.visit(ctx.reactor())
+        if ctx.function(): return self.visit(ctx.function())
+
+    def visitFunction(self, ctx:ThoriumParser.FunctionContext):
+        return Function(ctx)
 
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
         return ReactorType(ctx,
@@ -266,7 +373,6 @@ class CompositeTypes(ThoriumVisitor):
         return TypedIdentifier(ctx.ID().getText(), Cell('bool'))
 
 
-
 def hasStreamType(types):
     for type in types:
         if isinstance(type,Stream):
@@ -275,11 +381,14 @@ def hasStreamType(types):
 
 
 class SubExprTypeCheck(ThoriumVisitor):
-    def __init__(self,type_decls):
-        self.type_decls = type_decls
+    def __init__(self, decls):
+        self.decls = decls
+
+    def visitFunction(self, ctx:ThoriumParser.FunctionContext):
+        pass # todo: implement type checking
 
     def visitReactor(self, ctx:ThoriumParser.ReactorContext):
-        self.reactor = self.type_decls[ctx.ID().getText()]
+        self.reactor = self.decls[ctx.ID().getText()]
         for m in ctx.reactorMembers(): self.visit(m)
         if ctx.reactorProperties():
             self.visit(ctx.reactorProperties())
@@ -341,6 +450,10 @@ class SubExprTypeCheck(ThoriumVisitor):
         #print(f'visitExpr: {ctx.expr()}')
         ctx.expr().member_name = ctx.member_name
         return self.visit(ctx.expr())
+
+    def visitApply(self, ctx:ThoriumParser.ApplyContext):
+        self.visitSubExprs(ctx)
+        return self.decls[ctx.ID().getText()].result_type
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
         ctx.expr().member_name = f'{ctx.member_name}-1'
@@ -419,6 +532,11 @@ class SubExprTypeCheck(ThoriumVisitor):
         if hasStreamType(types): return Stream('bool')
         return Cell('bool')
 
+    def visitImplication(self, ctx:ThoriumParser.ImplicationContext):
+        types = self.visitSubExprs(ctx)
+        if hasStreamType(types): return Stream('bool')
+        return Cell('bool')
+
     def visitFilter(self, ctx:ThoriumParser.FilterContext):
         valueType,conditionType = self.visitSubExprs(ctx)
         return Stream(valueType)
@@ -476,9 +594,12 @@ class ReactiveValue:
             return self(k-1)
         return self(k)
 
+    def __repr__(self):
+        return f'{self.accessor}:{self.thorium_type}({self.z3_type})'
+
 
 class ReactorDefiner(ThoriumVisitor):
-    def __init__(self, composite_types:dict, z3_types:Z3Types):
+    def __init__(self, composite_types:dict, functions:dict, z3_types:Z3Types):
         ThoriumVisitor.__init__(self)
         self.solver = None
         self.trace = None
@@ -486,6 +607,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.first_state = None
         self.final_state = None
         self.composite_types = composite_types
+        self.functions = functions
         self.z3_types = z3_types
 
         self.snapshot_trigger = False
@@ -502,15 +624,16 @@ class ReactorDefiner(ThoriumVisitor):
                           '>=': operator.ge,
                           '==': operator.eq,
                           '!=': operator.ne,
+                          '->': z3.Implies,
                           'and': z3.And,
                           'or': z3.Or,
                           }
 
     def all_states(self):
-        return range(self.first_state,self.final_state+1)
+        return range(self.first_state, self.final_state+1)
 
     def active_states(self):
-        return range(self.first_state+1,self.final_state+1)
+        return range(self.first_state+1, self.final_state+1)
 
     def Assert(self,statement):
         self.solver.add(statement)
@@ -563,15 +686,24 @@ class ReactorDefiner(ThoriumVisitor):
             self.solver.add(accessor(self.trace(k)) == value)
         self.visitChildren(ctx)
 
-    def __getitem__(self, member_name: str):
-        if self.reactor_type.hasMember(member_name):
-            thorium_type = self.reactor_type.getType(member_name)
+    def __getitem__(self, id: str):
+        if self.reactor_type.hasMember(id):
+            thorium_type = self.reactor_type.getType(id)
             return ReactiveValue(self.trace,
-                                 self.z3_reactor_type.__getattribute__(member_name),
+                                 self.z3_reactor_type.__getattribute__(id),
                                  thorium_type,
                                  self.z3_types(thorium_type) )
-        else:
-            return Const()
+        elif id in self.functions:
+            f = self.functions[id]
+            f.setSolver(self.solver)
+            return f
+
+    def visitApply(self, ctx:ThoriumParser.ApplyContext):
+        function = self[ctx.ID().getText()]
+        args = [self[expr.member_name] for expr in ctx.expr()]
+        result = self[ctx.member_name]
+        self.apply(function, args, result)
+        self.visitChildren(ctx)
 
     def visitLtlNegation(self, ctx:ThoriumParser.LtlNegationContext):
         #print(f'Reactor {self.reactor_type}, {ctx.member_name} = not {ctx.ltlProperty().member_name}')
@@ -645,11 +777,12 @@ class ReactorDefiner(ThoriumVisitor):
         self.apply(f, [arg0], result)
 
     def binOp(self, ctx):
-        #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} {f} {ctx.expr(1).member_name}')
         f = self.operators[ctx.op.text]
         arg0 = self[ctx.expr(0).member_name]
         arg1 = self[ctx.expr(1).member_name]
         result = self[ctx.member_name]
+        #print(f'Reactor {self.reactor_type}, {ctx.member_name} = {ctx.expr(0).member_name} {f} {ctx.expr(1).member_name}')
+        #print(f'Reactor {self.reactor_type}, {result} = {arg0} {f} {arg1}')
         self.apply(f, [arg0, arg1], result)
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
@@ -708,6 +841,10 @@ class ReactorDefiner(ThoriumVisitor):
 
         else:
             self.binOp(ctx)
+        self.visitChildren(ctx)
+
+    def visitImplication(self, ctx:ThoriumParser.ImplicationContext):
+        self.binOp(ctx)
         self.visitChildren(ctx)
 
     def visitOr(self, ctx:ThoriumParser.AndContext):
@@ -850,15 +987,24 @@ def compile(filename):
     parser = ThoriumParser(stream)
     tree = parser.prog();
 
-    composite_types = CompositeTypes().visitProg(tree)
+    declarations = Declarations().visitProg(tree)
+    SubExprTypeCheck({t.name:t for t in declarations}).visitProg(tree)
     z3_types = Z3Types()
-    for composite_type in composite_types:
-        z3_types.addDatatype(composite_type)
+    composite_types = []
+    functions = []
+    for declaration in declarations:
+        if isinstance(declaration,Function):
+            functions.append(declaration)
+        else:
+            z3_types.addDatatype(declaration)
+            composite_types.append(declaration)
     composite_types = {t.name:t for t in composite_types}
-    SubExprTypeCheck(composite_types).visitProg(tree)
     z3_types.finalizeDatatypes()
+    for f in functions:
+        f.setTypeContext(z3_types)
+    functions = {f.name:f for f in functions}
 
-    return composite_types, z3_types
+    return composite_types, functions, z3_types
 
 
 def main(argv):
@@ -873,7 +1019,7 @@ def main(argv):
 
     args = argparser.parse_args()
 
-    composite_types, z3_types = compile(args.filename)
+    composite_types, functions, z3_types = compile(args.filename)
 
 
     #for t in composite_types.values():
@@ -881,7 +1027,7 @@ def main(argv):
 
     #PrintVisitor().visitProg(tree)
 
-    reactor_definer = ReactorDefiner(composite_types, z3_types)
+    reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
     solver = z3.Solver()
     reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N, solver)
     reactor_type = z3_types(args.reactor)

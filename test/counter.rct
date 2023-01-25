@@ -15,6 +15,7 @@ properties:
     stuck: (G not inc) -> (G (value == 0))
 }
 */
+/*
 reactor counter(inc: stream unit,
                 dec: stream unit,
                 min: cell int,
@@ -33,6 +34,34 @@ private:
     current_max:stream int = *max* | max @ inc or dec;
 properties:
     bounded: G ((0 <= min) and (min <= max) and (max <= 5)) -> G ((min <= value) and (value <= max));
+    //stuck: (G not inc) -> (G (value == 0))
+    //stuck: (Henceforth not inc) -> Henceforth (value == 0)
+}
+*/
+
+function enforce_bounds(min: int, value: int, max: int) -> int {
+    (min <= max) -> ((min <= result) and (result <= max));
+    ((min <= value) and (value <= max)) -> result == value;
+}
+
+function within_bounds(min: int, value: int, max: int) -> bool {
+    result == (min <= value and value <= max)
+}
+
+reactor counter(inc: stream unit,
+                dec: stream unit,
+                min: cell int,
+                max: cell int) {
+    value: cell int = min .. enforce_bounds(min, V, max);
+private:
+    V: cell int = min .. value+delta;
+
+    delta: stream int =  value @ inc and dec
+                      |  value+1 @ inc
+                      |  value-1 @ dec;
+properties:
+    bounded: G ((0 <= min) and (min <= max) and (max <= 5)) -> G ((min <= value) and (value <= max));
+    expected: G ((0 <= min) and (min <= max) and (max <= 5)) -> G within_bounds(min,V,max) -> value==V;
     //stuck: (G not inc) -> (G (value == 0))
     //stuck: (Henceforth not inc) -> Henceforth (value == 0)
 }

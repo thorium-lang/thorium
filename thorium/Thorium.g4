@@ -12,7 +12,7 @@ struct: STRUCT ID LBRACE structMembers? RBRACE ;
 
 enum:     ENUM ID LBRACE enumMembers? RBRACE ;
 
-function: FUNCTION ID LPAREN functionParams? RPAREN '->' functionParam LBRACE
+function: FUNCTION ID LPAREN functionParams? RPAREN '->' type LBRACE
     functionProperties?
 RBRACE;
 
@@ -49,6 +49,7 @@ structMembers: structMember (COMMA structMember)* ;
 structMember: ID COLON type ;
 
 enumMembers: enumMember (COMMA enumMember)* ;
+
 enumMember: ID COLON type ;
 
 enumParams: type (COMMA type)* ;
@@ -86,6 +87,7 @@ expr:
     | NUMBER                     # number
     | STAR expr STAR             # changes
     | LPAREN expr RPAREN         # paren
+    | ID LPAREN expr (COMMA expr)* RPAREN # apply
     | expr op=(STAR|DIV) expr    # mult
     | expr op=(PLUS|MINUS) expr  # add
     | expr op=(LT|LE|GT|GE) expr # compare
@@ -93,6 +95,7 @@ expr:
     | op=NOT expr                # not
     | expr op=AND expr           # and
     | expr op=OR  expr           # or
+    | <assoc=right> expr op=IMPLIES expr # implication
     | expr AT expr               # snapshot
     | <assoc=right> expr IF expr   # filter
     | <assoc=right> expr PIPE expr # alternate
