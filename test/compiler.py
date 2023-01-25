@@ -123,7 +123,7 @@ class Function(ThoriumVisitor):
         return self.symbols[ctx.ID().getText()]
 
     def visitNumber(self, ctx:ThoriumParser.NumberContext):
-        return int(ctx.NUMBER())
+        return int(ctx.NUMBER().getText())
 
     def visitParen(self, ctx:ThoriumParser.ParenContext):
         return self.visit(ctx.expr())
@@ -194,7 +194,8 @@ class ReactorType:
     def getDeclaredMemberValues(self, z3_instance):
         def pretty(s: str):
             import re
-            eventMatch = re.findall(r'event\(([^\)]+)\)',s)
+            #eventMatch = re.findall(r'event\(([^\)]+)\)',s)
+            eventMatch = re.findall(r'event\((.+)\)',s)
             if eventMatch: return f'[{eventMatch[0]}]'#.replace('unit','()')
             return s.replace('nothing','[]')
         return [pretty(f'{z3_instance.arg(i)}') for i in
@@ -251,13 +252,18 @@ class StructType:
         self.members = members
         self.members_dict = {m.name:m.type for m in members}
 
-    def declareZ3Constructor(self, type_ctx):
-        arguments = [(id.name, type_ctx(id.type)) for id in self.members]
-        type_ctx(self.name).declare(f'{self.name}', *arguments)
+    def declareZ3Constructor(self, z3_types):
+        self.z3_types = z3_types
+        arguments = [(id.name, z3_types(id.type)) for id in self.members]
+        z3_types(self.name).declare(f'{self.name}', *arguments)
 
     def getPublicMemberType(self, name):
         return self.members[name]
 
+    def __call__(self, *args):
+        f = self.z3_types(self.name).__getattribute__(self.name)
+        #print(f'calling struct constructor {f} {args}')
+        return f(*args)
     def __str__(self):
         return self.name
 
@@ -452,8 +458,14 @@ class SubExprTypeCheck(ThoriumVisitor):
         return self.visit(ctx.expr())
 
     def visitApply(self, ctx:ThoriumParser.ApplyContext):
-        self.visitSubExprs(ctx)
-        return self.decls[ctx.ID().getText()].result_type
+        types = self.visitSubExprs(ctx)
+        f = self.decls[ctx.ID().getText()]
+        if isinstance(f,Function):
+            result_type = f.result_type
+        else: # struct, for now
+            result_type = f.name
+        if hasStreamType(types): return Stream(result_type)
+        return result_type
 
     def visitNegative(self, ctx:ThoriumParser.NegativeContext):
         ctx.expr().member_name = f'{ctx.member_name}-1'
@@ -653,6 +665,7 @@ class ReactorDefiner(ThoriumVisitor):
         else:
             for k in self.all_states():
                 values = [arg.getValue(k) for arg in args]
+                #print(f'apply: {result.setValue(k, f(*values))}')
                 self.solver.add(result.setValue(k, f(*values)))
 
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
@@ -697,11 +710,16 @@ class ReactorDefiner(ThoriumVisitor):
             f = self.functions[id]
             f.setSolver(self.solver)
             return f
+        elif id in self.composite_types:
+            f = self.composite_types[id]
+            if isinstance(f,StructType):
+                return f
 
     def visitApply(self, ctx:ThoriumParser.ApplyContext):
         function = self[ctx.ID().getText()]
         args = [self[expr.member_name] for expr in ctx.expr()]
         result = self[ctx.member_name]
+        #print(f'Reactor {self.reactor_type}, {ctx.member_name} {ctx.ID().getText()}({args})')
         self.apply(function, args, result)
         self.visitChildren(ctx)
 
@@ -906,6 +924,7 @@ class ReactorDefiner(ThoriumVisitor):
         init = self[ctx.expr(0).member_name]
         update = self[ctx.expr(1).member_name]
         result = self[ctx.member_name]
+        #print(f'result {result} init {init}')
         self.solver.add(result(self.first_state) == init(self.first_state))
         for k in range(self.first_state+1, self.final_state+1):
             self.solver.add(result(k) == z3.If(update.isNothing(k),
@@ -932,7 +951,7 @@ class PrintVisitor(ThoriumVisitor):
 
     def visitReactorMember(self, ctx:ThoriumParser.ReactorMemberContext):
         self.ExprName = ctx.ID().getText()
-        print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
+        #print(f'member {ctx.ID()} = {self.visit(ctx.expr())}')
         return ctx.ID().getText()
 
     def visitAdd(self, ctx:ThoriumParser.AddContext):
