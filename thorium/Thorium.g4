@@ -82,7 +82,8 @@ ltlProperty:
 //    ;
 
 expr:
-      op=MINUS expr              # negative
+      expr DOT ID                # memberAccess
+    | op=MINUS expr              # negative
     | ID                         # id
     | NUMBER                     # number
     | STAR expr STAR             # changes

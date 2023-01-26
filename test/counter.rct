@@ -58,19 +58,16 @@ reactor counter(inc: stream unit,
                 dec: stream unit,
                 min: cell int,
                 max: cell int) {
-    //test: cell StructTest = StructTest(0,0);
-    test: cell StructTest = StructTest(0,0) .. StructTest(delta,5);
-    //test: stream StructTest = StructTest(delta,5);
-    value: cell int = enforce_bounds(min, V, max);
+    value: cell int = enforce_bounds(min, test.v , max);
 private:
-    V: cell int = min .. value+delta;
+    test: cell StructTest = StructTest(0,0) .. StructTest(delta,5);
 
     delta: stream int =  value @ inc and dec
                       |  value+1 @ inc
                       |  value-1 @ dec;
 properties:
     bounded: G ((0 <= min) and (min <= max) and (max <= 5)) -> G ((min <= value) and (value <= max));
-    expected: G ((0 <= min) and (min <= max) and (max <= 5)) -> G within_bounds(min,V,max) -> value==V;
+    expected: G ((0 <= min) and (min <= max) and (max <= 5)) -> G within_bounds(min,test.v,max) -> value==test.v;
     bad: G ((0 <= min) and (min <= max) and (max <= 5)) -> G (value == 0);
     //stuck: (G not inc) -> (G (value == 0))
     //stuck: (Henceforth not inc) -> Henceforth (value == 0)
