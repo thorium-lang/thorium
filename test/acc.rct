@@ -1,11 +1,8 @@
 reactor acc(inc: stream unit) {
   value: cell int = 0 .. value+increment;
 private:
-  //increment: stream int = 1 @ inc;
-  increment: stream int = 1 if inc;
+  increment: stream int = 1 @ inc;
 properties:
-  increasing: F value >= 0;
   non_negative: G value >= 0;
   one_digit: G (0 <= value and value <= 9);
-  stuck: G not inc -> G (value == 0)
 }

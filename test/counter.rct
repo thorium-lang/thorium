@@ -15,15 +15,15 @@ properties:
     stuck: (G not inc) -> (G (value == 0))
 }
 */
-/*
 
-reactor counter(inc: stream unit,
+
+reactor change_counter(inc: stream unit,
                 dec: stream unit,
                 min: cell int,
                 max: cell int) {
     value: cell int = min .. change;
 private:
-    change: stream int = delta if delta >= current_min and delta <= current_max
+    change: stream int = delta if (delta >= current_min and delta <= current_max)
                        | *max* if *max* < value
                        | *min* if *min* > value;
 
@@ -38,7 +38,6 @@ properties:
     //stuck: (G not inc) -> (G (value == 0))
     //stuck: (Henceforth not inc) -> Henceforth (value == 0)
 }
-*/
 
 struct StructTest {
     v: int,

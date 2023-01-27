@@ -99,7 +99,7 @@ expr:
     | <assoc=right> expr op=IMPLIES expr # implication
     | expr AT expr               # snapshot
     | <assoc=right> expr IF expr   # filter
-    | <assoc=right> expr PIPE expr # alternate
+    | <assoc=right> expr PIPE expr # merge
     | expr DOTS expr               # hold
     ;
 
