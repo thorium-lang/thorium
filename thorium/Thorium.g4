@@ -44,7 +44,7 @@ reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
 
 reactorProperty: ID COLON property;
 
-structMembers: structMember (COMMA structMember)* ;
+structMembers: structMember (COMMA structMember)* COMMA?;
 
 structMember: ID COLON type ;
 
@@ -66,6 +66,7 @@ property:
 ltlProperty:
       NOT ltlProperty                               # ltlNegation
     | LPAREN ltlProperty RPAREN                     # ltlParen
+    | NEXT ltlProperty                              # ltlNext
     | GLOBALLY ltlProperty                          # ltlGlobally
     | EVENTUALLY ltlProperty                        # ltlEventually
     | ltlProperty UNTIL ltlProperty                 # ltlUntil
@@ -84,6 +85,8 @@ ltlProperty:
 expr:
       expr DOT ID                # memberAccess
     | op=MINUS expr              # negative
+    | UNIT                       # unit
+    | (TRUE|FALSE)               # bool
     | ID                         # id
     | NUMBER                     # number
     | STAR expr STAR             # changes
@@ -131,6 +134,7 @@ PIPE       : '|' ;
 IF         : 'if' ;
 AT         : '@' ;
 NOT        : 'not' ;
+NEXT       : 'X' ;
 GLOBALLY   : 'G' ;
 EVENTUALLY : 'F' ;
 UNTIL      : 'U' ;
@@ -151,6 +155,9 @@ fragment ALPHA    : [a-zA-Z_]    ;
 fragment ALPHANUM : [a-zA-Z_0-9] ;
 fragment NUM : [0-9] ;
 
+UNIT   : '()' ;
+TRUE   : 'true' ;
+FALSE  : 'false' ;
 ID : ALPHA ALPHANUM* ;
 NUMBER : NUM+ ;
 

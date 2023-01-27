@@ -6,7 +6,6 @@ reactor counter(inc: stream unit,
     max: cell int = 10;
 private:
     change: stream int = (value + delta);
-    //change: stream int = (value + delta) if (min <= value+delta) and (value+delta <= max);
     delta: stream int =  0 @ inc and dec
                       |  1 @ inc
                       | -1 @ dec;

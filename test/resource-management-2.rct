@@ -1,0 +1,53 @@
+struct Command {
+    worker_id: int,
+    request: bool,
+    query: bool,
+    disconnect: bool
+}
+
+struct Response {
+    worker_id: int,
+    value: bool,
+    disconnect: bool
+}
+
+struct Worker {
+    id: int,
+    busy: bool
+}
+
+function xor(a: bool, b: bool, c: bool) -> bool {
+    result == ((a or b or c) and not ((a and b) or (b and c) or (a and c)));
+}
+
+function active(c :Command) -> bool {
+    result == true;
+}
+
+function int_active(id :int) -> bool {
+    result == true;
+}
+
+reactor manager(input: stream Command) {
+    //output: stream Response =
+    resource_unavailable: stream bool = true @ (request and not assigned_worker_id);
+private:
+    request: stream Command = input if input.request;
+    query: stream Command = input if input.query;
+    disconnect: stream Command = input if input.disconnect;
+
+    workerA: cell Worker = Worker(0,false) .. Worker(0,true)  if assigned_worker_id == workerA.id
+                                            | Worker(0,false) if released_worker_id == workerA.id;
+    workerB: cell Worker = Worker(1,false) .. Worker(1,true)  if assigned_worker_id == workerB.id
+                                            | Worker(1,false) if released_worker_id == workerB.id;
+
+    assigned_worker_id: stream int = (workerA.id @ request) if not workerA.busy
+                                   | (workerB.id @ request) if not workerB.busy;
+    released_worker_id: stream int = workerA.id @ disconnect if workerA.busy and input.worker_id == workerA.id
+                                   | workerB.id @ disconnect if workerB.busy and input.worker_id == workerB.id;
+
+    count: cell int = 0 .. count + ( 1 @ assigned_worker_id
+                                   |-1 @ released_worker_id);
+properties:
+    good: G((true @ input) -> xor(input.request, input.query, input.disconnect)) -> G ((true @ resource_unavailable) -> (count==3));
+}
