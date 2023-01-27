@@ -16,24 +16,15 @@ struct Worker {
     busy: bool
 }
 
-function xor(a: bool, b: bool, c: bool) -> bool {
-    result == ((a or b or c) and not ((a and b) or (b and c) or (a and c)));
-}
-
-function active(c :Command) -> bool {
-    result == true;
-}
-
-function int_active(id :int) -> bool {
-    result == true;
+function simultaneous(a: bool, b: bool, c: bool) -> bool {
+    result == ((a and b) or (b and c) or (a and c));
 }
 
 reactor manager(input: stream Command) {
-    //output: stream Response =
-    resource_unavailable: stream bool = true @ (request and not assigned_worker_id);
+    resource_unavailable: stream unit = unit(request and not assigned_worker_id);
 private:
-    request: stream Command = input if input.request;
-    query: stream Command = input if input.query;
+    request:    stream Command = input if input.request;
+    query:      stream Command = input if input.query;
     disconnect: stream Command = input if input.disconnect;
 
     workerA: cell Worker = Worker(0,false) .. Worker(0,true)  if assigned_worker_id == workerA.id
@@ -53,5 +44,5 @@ private:
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
-    good: G((true @ input) -> xor(input.request, input.query, input.disconnect)) -> G ((true @ resource_unavailable) -> (count==3));
+    good: G not simultaneous (input.request, input.query, input.disconnect) => G (resource_unavailable => (count==3));
 }

@@ -72,7 +72,7 @@ ltlProperty:
     | ltlProperty UNTIL ltlProperty                 # ltlUntil
     | <assoc=right> ltlProperty AND ltlProperty     # ltlAnd
     | <assoc=right> ltlProperty OR ltlProperty      # ltlOr
-    | <assoc=right> ltlProperty IMPLIES ltlProperty # ltlImplication
+    | <assoc=right> ltlProperty (LTLIMPLIES|IMPLIES) ltlProperty # ltlImplication
     | expr                                          # ltlExpr
     ;
 
@@ -139,6 +139,7 @@ GLOBALLY   : 'G' ;
 EVENTUALLY : 'F' ;
 UNTIL      : 'U' ;
 IMPLIES    : '->' ;
+LTLIMPLIES : '=>' ;
 FORALL     : 'forall' ;
 EXISTS     : 'exists' ;
 CELL       : 'cell' ;

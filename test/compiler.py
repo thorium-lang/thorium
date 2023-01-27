@@ -518,11 +518,14 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         types = self.visitSubExprs(ctx)
-        f = self.decls[ctx.ID().getText()]
-        if isinstance(f, Function):
-            result_type = f.result_type
-        else:  # struct, for now
-            result_type = f.name
+        if ctx.ID().getText()=='unit':
+            result_type = 'unit'
+        else:
+            f = self.decls[ctx.ID().getText()]
+            if isinstance(f, Function):
+                result_type = f.result_type
+            else:  # struct, for now
+                result_type = f.name
         if hasStreamType(types):
             return Stream(result_type)
         return result_type
@@ -814,12 +817,31 @@ class ReactorDefiner(ThoriumVisitor):
             if isinstance(f, StructType):
                 return f
 
+    def unit(self,args,result):
+        stream_args = [arg for arg in args if arg.isStream()]
+        if stream_args:
+            self.Assert(result.isNothing(self.first_state))
+            for k in self.streaming_states():
+                missing_args = z3.Or(*[arg.isNothing(k) for arg in stream_args])
+                self.Assert(z3.If(missing_args,
+                                  result.isNothing(k),
+                                  result.setValue(k, self.z3_types('unit').unit)))
+        else:
+            for k in self.all_states():
+                self.Assert(result.setValue(k, self.z3_types('unit').unit))
+
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
-        function = self[ctx.ID().getText()]
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]
         result = self[self.expr_name(ctx)]
-        self.apply(function, args, result)
-        self.visitChildren(ctx)
+        if ctx.ID().getText()=='unit':
+            self.snapshot_trigger = True
+            self.visitChildren(ctx)
+            self.snapshot_trigger = False
+            self.unit(args,result)
+        else:
+            function = self[ctx.ID().getText()]
+            self.apply(function, args, result)
+            self.visitChildren(ctx)
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
         arg = self[self.expr_name(ctx.ltlProperty())]
