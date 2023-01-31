@@ -7,7 +7,7 @@ struct Command {
 
 struct Response {
     worker_id: int,
-    value: bool,
+    reply: bool,
     disconnect: bool
 }
 
@@ -22,6 +22,7 @@ function simultaneous(a: bool, b: bool, c: bool) -> bool {
 
 reactor manager(input: stream Command) {
     resource_unavailable: stream unit = unit(request and not assigned_worker_id);
+    response: stream Response = responseA| responseB | responseC;
 private:
     request:    stream Command = input if input.request;
     query:      stream Command = input if input.query;
@@ -41,8 +42,18 @@ private:
                                    | workerB.id @ disconnect if workerB.busy and input.worker_id == workerB.id
                                    | workerC.id @ disconnect if workerC.busy and input.worker_id == workerC.id;
 
+    responseA: stream Response  = Response(workerA.id, true, false) @ query if query.worker_id == workerA.id and workerA.busy
+                                | Response(workerA.id, false, true) @ disconnect if disconnect.worker_id == workerA.id and workerA.busy;
+    responseB: stream Response  = Response(workerB.id, true, false) @ query if query.worker_id == workerB.id and workerB.busy
+                                | Response(workerB.id, false, true) @ disconnect if disconnect.worker_id == workerB.id and workerB.busy;
+    responseC: stream Response  = Response(workerC.id, true, false) @ query if query.worker_id == workerC.id and workerC.busy
+                                | Response(workerC.id, false, true) @ disconnect if disconnect.worker_id == workerC.id and workerB.busy;
+
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
-    good: G not simultaneous (input.request, input.query, input.disconnect) => G (resource_unavailable => (count==3));
+    diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
+                  G (resource_unavailable => (count==3));
+    orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
+                  G ((responseA.reply) => ((not responseA.disconnect) S (assigned_worker_id==workerA.id)));
 }

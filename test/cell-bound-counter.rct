@@ -1,0 +1,17 @@
+reactor counter(inc: stream unit,
+                dec: stream unit,
+                min: cell int,
+                max: cell int) {
+    value: cell int = min..next;
+private:
+    delta: stream int =  0 @ inc and dec
+                      |  1 @ inc
+                      | -1 @ dec;
+    update: stream int = value + delta;
+    next: stream int = update if min <= update and
+                            update <= max;
+properties:
+    bounded: G ((0<=min) and (max<=9) and (min <= max)) ->
+                 G ((min <= value) and
+                  (value <= max));
+}

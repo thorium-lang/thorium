@@ -7,7 +7,7 @@ struct Command {
 
 struct Response {
     worker_id: int,
-    value: bool,
+    reply: bool,
     disconnect: bool
 }
 
@@ -16,36 +16,32 @@ struct Worker {
     busy: bool
 }
 
-function xor(a: bool, b: bool, c: bool) -> bool {
-    result == ((a or b or c) and not ((a and b) or (b and c) or (a and c)));
-}
-
-function active(c :Command) -> bool {
-    result == true;
-}
-
-function int_active(id :int) -> bool {
-    result == true;
+function simultaneous(a: bool, b: bool, c: bool) -> bool {
+    result == ((a and b) or (b and c) or (a and c));
 }
 
 reactor manager(input: stream Command) {
-    //output: stream Response =
-    resource_unavailable: stream bool = true @ (request and not assigned_worker_id);
+    resource_unavailable: stream unit = unit(request and not assigned_worker_id);
+    response: stream Response = responseA;
 private:
-    workerA: cell Worker = Worker(0,false) .. Worker(0,true)  if assigned_worker_id == workerA.id
-                                            | Worker(0,false) if released_worker_id == workerA.id;
-    request: stream Command = input if input.request;//==true;
-    query: stream Command = input if input.query;
+    request:    stream Command = input if input.request;
+    query:      stream Command = input if input.query;
     disconnect: stream Command = input if input.disconnect;
 
+    workerA: cell Worker = Worker(0,false) .. Worker(0,true)  if assigned_worker_id == workerA.id
+                                            | Worker(0,false) if released_worker_id == workerA.id;
+
     assigned_worker_id: stream int = (workerA.id @ request) if not workerA.busy;
-    released_worker_id: stream int = workerA.id @ disconnect if workerA.busy;
+    released_worker_id: stream int = workerA.id @ disconnect if workerA.busy and input.worker_id == workerA.id;
+
+    responseA: stream Response  = Response(workerA.id, true, false) @ query if query.worker_id == workerA.id and workerA.busy
+                                | Response(workerA.id, false, true) @ disconnect if disconnect.worker_id == workerA.id and workerA.busy;
 
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
-    //good: G(active(input) -> xor(input.request, input.query, input.disconnect)) -> not F int_active(released_worker_id));
-    //good: G(active(input) -> xor(input.request, input.query, input.disconnect)) -> false;
-    //good: G((true @ input) -> xor(input.request, input.query, input.disconnect)) -> not F true @ resource_unavailable;
-    good: G((true @ input) -> xor(input.request, input.query, input.disconnect)) -> G ((true @ resource_unavailable) -> (count==1));
+    diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
+                  G (resource_unavailable => (count==1));
+    orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
+                  G ((responseA.reply) => ((not responseA.disconnect) S (assigned_worker_id==workerA.id)));
 }

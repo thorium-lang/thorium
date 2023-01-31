@@ -500,6 +500,10 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.visitSubExprs(ctx, ctx.ltlProperty())
         return Cell('bool')
 
+    def visitLtlSince(self, ctx:ThoriumParser.LtlSinceContext):
+        self.visitSubExprs(ctx, ctx.ltlProperty())
+        return Cell('bool')
+
     def visitLtlAnd(self, ctx: ThoriumParser.LtlAndContext):
         self.visitSubExprs(ctx, ctx.ltlProperty())
         return Cell('bool')
@@ -887,6 +891,18 @@ class ReactorDefiner(ThoriumVisitor):
         self.Assert(result.setValue(self.final_state+1, True))  # optimistic semantics
         self.visitChildren(ctx)
 
+    def since(self, p, q, S):
+        self.Assert(z3.Not(S(self.k0-1)))
+        for k in self.all_states():
+            self.Assert(S(k) == z3.Or(q.isTrue(k),
+                                           z3.And(p.isTrue(k),
+                                                  S(k-1))))
+
+    def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
+        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
+        since(p, q, result)
+        self.visitChildren(ctx)
+
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
         self.visitChildren(ctx)
 
@@ -1141,7 +1157,7 @@ def main(_argv):
         column_widths = [max([len(name) for name in column]) for column in trace]
         format_string = ' & '.join(('%%%ds' % width) for width in column_widths) + r' \\'
         print(r'\begin{centering}')
-        print(r'\begin{tabular}[%s]' % ('|c'*len(column_widths)+'|'))
+        print(r'\begin{tabular}{%s}' % ('|c'*len(column_widths)+'|'))
         print(r'\hline')
         print(format_string % tuple(['k']+ list(range(len(column_widths)-1))))
         print(r'\hline')

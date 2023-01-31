@@ -68,8 +68,11 @@ ltlProperty:
     | LPAREN ltlProperty RPAREN                     # ltlParen
     | NEXT ltlProperty                              # ltlNext
     | GLOBALLY ltlProperty                          # ltlGlobally
+    | HISTORICALLY ltlProperty                      # ltlHistorically
     | EVENTUALLY ltlProperty                        # ltlEventually
+    | PREVIOUSLY ltlProperty                        # ltlPreviously
     | ltlProperty UNTIL ltlProperty                 # ltlUntil
+    | ltlProperty SINCE ltlProperty                 # ltlSince
     | <assoc=right> ltlProperty AND ltlProperty     # ltlAnd
     | <assoc=right> ltlProperty OR ltlProperty      # ltlOr
     | <assoc=right> ltlProperty (LTLIMPLIES|IMPLIES) ltlProperty # ltlImplication
@@ -136,8 +139,11 @@ AT         : '@' ;
 NOT        : 'not' ;
 NEXT       : 'X' ;
 GLOBALLY   : 'G' ;
+HISTORICALLY : 'H' ;
 EVENTUALLY : 'F' ;
+PREVIOUSLY : 'P' ;
 UNTIL      : 'U' ;
+SINCE      : 'S' ;
 IMPLIES    : '->' ;
 LTLIMPLIES : '=>' ;
 FORALL     : 'forall' ;

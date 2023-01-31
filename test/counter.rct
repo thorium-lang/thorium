@@ -38,36 +38,23 @@ properties:
     //stuck: (Henceforth not inc) -> Henceforth (value == 0)
 }
 
-struct StructTest {
-    v: int,
-    n: int
-}
-
 function enforce_bounds(min: int, value: int, max: int) -> int {
     (min <= max) -> ((min <= result) and (result <= max));
     ((min <= value) and (value <= max)) -> result == value;
-}
-
-function within_bounds(min: int, value: int, max: int) -> bool {
-    result == (min <= value and value <= max)
 }
 
 reactor counter(inc: stream unit,
                 dec: stream unit,
                 min: cell int,
                 max: cell int) {
-    value: cell int = enforce_bounds(min, test.v , max);
+    value: cell int = enforce_bounds(min, val , max);
 private:
-    test: cell StructTest = StructTest(0,0) .. StructTest(delta,5);
+    val: cell int = 0 .. delta;
 
     delta: stream int =  value @ inc and dec
                       |  value+1 @ inc
                       |  value-1 @ dec;
 properties:
-    bounded: G ((0 <= min) and (min <= max) and (max <= 5)) -> G ((min <= value) and (value <= max));
-    expected: G ((0 <= min) and (min <= max) and (max <= 5)) -> G within_bounds(min,test.v,max) -> value==test.v;
-    bad: G ((0 <= min) and (min <= max) and (max <= 5)) -> G (value == 0);
-    //stuck: (G not inc) -> (G (value == 0))
-    //stuck: (Henceforth not inc) -> Henceforth (value == 0)
+    bounded: G ((0 <= min) and (min <= max) -> (min <= value) and (value <= max));
 }
 
