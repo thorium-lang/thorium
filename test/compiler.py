@@ -5,356 +5,54 @@ import z3
 import antlr4
 from thorium import *
 from typing import List
-
+from thorium.z3types import Z3Types
+from thorium.reactivetypes import *
+from thorium.decls import *
+from thorium.reactor_definer import ReactorDefiner
 
 def lmap(f, iterable):
     return list(map(f, iterable))
 
 
-class Cell:
-    def __init__(self, type_):
-        if isinstance(type_, Stream) or isinstance(type_, Cell):
-            self.type = type_.type
-        else:
-            self.type = type_
 
-    def __str__(self):
-        return f'cell-{self.type}'
 
-
-class Stream:
-    def __init__(self, type_):
-        if isinstance(type_, Stream) or isinstance(type_, Cell):
-            self.type = type_.type
-        else:
-            self.type = type_
-        self.name = self
-
-    def declareZ3Constructor(self, type_ctx):
-        type_ctx(self).declare('event', ('value', type_ctx(self.type)))
-        type_ctx(self).declare('nothing')
-
-    def __str__(self):
-        return f'stream-{self.type}'
-
-    def __eq__(self, other):
-        return isinstance(other, Stream) and (self.type == other.type)
-
-
-def base_type(type_):
-    if isinstance(type_, Cell):
-        return type_.type
-    if isinstance(type_, Stream):
-        return type_.type
-    return type_
-
-
-class TypedIdentifier:
-    def __init__(self, name, type_):
-        self.name = name
-        self.type = type_
-
-    def __repr__(self):
-        return f'{self.name} : {self.type}'
-
-
-class Operators:
-    unary = {'-': operator.neg,
-             'not': z3.Not}
-    binary = {'+': operator.add,
-              '-': operator.sub,
-              '*': operator.mul,
-              '/': operator.truediv,
-              '<': operator.lt,
-              '<=': operator.le,
-              '>': operator.gt,
-              '>=': operator.ge,
-              '==': operator.eq,
-              '!=': operator.ne,
-              '->': z3.Implies,
-              'and': z3.And,
-              'or': z3.Or,
-              }
-
-
-class Function(ThoriumVisitor):
-    def __init__(self, ctx: ThoriumParser.FunctionContext):
-        self.solver = None
-        self.name = None
-        self.params = None
-        self.result_type = None
-        self.properties = None
-        self.f = None
-        self.visit(ctx)
-
-    def unaryOp(self, ctx):
-        f = Operators.unary[ctx.op.text]
-        arg = self.visit(ctx.expr())
-        return f(arg)
-
-    def binOp(self, ctx):
-        f = Operators.binary[ctx.op.text]
-        arg0 = self.visit(ctx.expr(0))
-        arg1 = self.visit(ctx.expr(1))
-        return f(arg0, arg1)
-
-    def setSolver(self, solver):
-        self.solver = solver
-
-    def __call__(self, *args):
-        self.symbols = {p.name: a for p, a in zip(self.params, args)}
-        self.symbols['result'] = self.f(*args)
-        self.visit(self.properties)
-        return self.f(*args)
-
-    def visitFunction(self, ctx: ThoriumParser.FunctionContext):
-        self.name = ctx.ID().getText()
-        self.params = self.visit(ctx.functionParams())
-        self.result_type = self.visit(ctx.type_())
-        self.properties = ctx.functionProperties()
-
-    def setTypeContext(self, z3_types):
-        args = [self.name] + [z3_types(param.type) for param in self.params] + [z3_types(self.result_type)]
-        self.f = z3.Function(*args)
-
-    def visitFunctionParams(self, ctx: ThoriumParser.FunctionParamsContext):
-        return [self.visit(param) for param in ctx.functionParam()]
-
-    def visitFunctionParam(self, ctx: ThoriumParser.FunctionParamContext):
-        return TypedIdentifier(ctx.ID().getText(), self.visit(ctx.type_()))
-
-    def visitType(self, ctx: ThoriumParser.TypeContext):
-        return ctx.ID().getText()
-
-    def visitFunctionProperty(self, ctx: ThoriumParser.FunctionPropertyContext):
-        property = self.visit(ctx.expr())
-        # print(f'function property {property}')
-        self.solver.add(property)
-
-    def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
-        print('*************************************** not implemented')
-        pass
-
-    def visitId(self, ctx: ThoriumParser.IdContext):
-        return self.symbols[ctx.ID().getText()]
-
-    def visitNumber(self, ctx: ThoriumParser.NumberContext):
-        return int(ctx.NUMBER().getText())
-
-    def visitBool(self, ctx: ThoriumParser.BoolContext):
-        return bool(ctx.TRUE())
-
-    def visitParen(self, ctx: ThoriumParser.ParenContext):
-        return self.visit(ctx.expr())
-
-    def visitMult(self, ctx: ThoriumParser.MultContext):
-        return self.binOp(ctx)
-
-    def visitAdd(self, ctx: ThoriumParser.AddContext):
-        return self.binOp(ctx)
-
-    def visitCompare(self, ctx: ThoriumParser.CompareContext):
-        return self.binOp(ctx)
-
-    def visitEquals(self, ctx: ThoriumParser.EqualsContext):
-        return self.binOp(ctx)
-
-    def visitNot(self, ctx: ThoriumParser.NotContext):
-        return self.unaryOp(ctx)
-
-    def visitAnd(self, ctx: ThoriumParser.AndContext):
-        return self.binOp(ctx)
-
-    def visitOr(self, ctx: ThoriumParser.AndContext):
-        return self.binOp(ctx)
-
-    def visitImplication(self, ctx: ThoriumParser.ImplicationContext):
-        return self.binOp(ctx)
-
-
-class ReactorType:
-    def __init__(self, ctx: ThoriumParser.ReactorContext,
-                       name: str,
-                       params: List[TypedIdentifier],
-                       public_members: List[TypedIdentifier],
-                       private_members: List[TypedIdentifier],
-                       properties: List[TypedIdentifier]):
-        self.ctx = ctx
-        self.name = name
-        self.params = params
-        self.params_dict = {m.name: m.type for m in params}
-        self.public_members = public_members
-        self.public_members_dict = {m.name: m.type for m in public_members}
-        self.private_members = private_members
-        self.private_members_dict = {m.name: m.type for m in private_members}
-        self.properties = properties
-        self.properties_dict = {m.name: m.type for m in properties}
-        self.all_members = {}
-        self.all_members.update(self.params_dict)
-        self.all_members.update(self.public_members_dict)
-        self.all_members.update(self.private_members_dict)
-        self.all_members.update(self.properties_dict)
-        self.subexprs = []
-        self.subexprs_dict = {}
-
-        self.expr_names = {}  # mapping from parser expression context to member names
-
-    def expr_name(self, ctx):
-        return self.expr_names[ctx]
-
-    def set_expr_name(self, ctx, name):
-        self.expr_names[ctx] = name
-
-    def declareZ3Constructor(self, type_ctx):
-        arguments = []
-        for id in self.params+self.public_members+self.private_members+self.properties+self.subexprs:
-            arguments.append((id.name, type_ctx(id.type)))
-        type_ctx(self.name).declare(f'{self.name}', *arguments)
-
-    def show(self, z3_instance):
-        for i, id in enumerate(self.getDeclaredMemberNames()):
-            print(f'{id.name:>20s} : {z3_instance.arg(i)}')
-
-    def getMemberNames(self):
-        return [id.name for id in self.params+self.public_members+self.private_members+self.properties+self.subexprs]
-
-    def getDeclaredMemberNames(self):
-        return [id.name for id in self.params+self.public_members+self.private_members]
-
-    def getDeclaredMemberValues(self, z3_instance):
-        def pretty(s: str):
-            import re
-            event = re.findall(r'event\((.+)\)', s)
-            if event:
-                return f'[{event[0]}]'  # .replace('unit', '()')
-            return s.replace('nothing', '[]')
-        return [pretty(f'{z3_instance.arg(i)}') for i in
-                     range(len(self.getDeclaredMemberNames()))]
-
-    def getMemberValues(self, z3_instance):
-        def pretty(s: str):
-            import re
-            event = re.findall(r'event\((.+)\)', s)
-            if event:
-                return f'[{event[0]}]'  # .replace('unit', '()')
-            return s.replace('nothing', '[]')
-        return [pretty(f'{z3_instance.arg(i)}') for i in
-                range(len(self.getMemberNames()))]
-
-    def getParamType(self, i):
-        return self.params[i].type
-
-    def getPublicMemberType(self, name):
-        return self.public_members_dict[name]
-
-    def getPrivateMemberType(self, name):
-        return self.private_members_dict[name]
-
-    def getSubExprType(self, name):
-        return self.subexprs_dict[name]
-
-    def getType(self, name):
-        if name in self.all_members:
-            return self.all_members[name]
-        raise Exception(f"Unknown member {name}")
-
-    def hasMember(self, name):
-        return name in self.getMemberNames()
-
-    def addSubExpr(self, expr, type_):
-        name = self.expr_name(expr)  # it will always have been defined
-        self.subexprs.append(TypedIdentifier(name, type_))
-        self.subexprs_dict[name] = type_
-        self.all_members[name] = type_
-        self.expr_names[expr] = name
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        def indented_typed_identifiers(id_list):
-            return '\n                '.join((f'{id.name} : {id.type}' for id in id_list))
-
-        return f'''reactor {self.name}
-    params:     {indented_typed_identifiers(self.params)}
-    members:    {indented_typed_identifiers(self.public_members)}
-    private:    {indented_typed_identifiers(self.private_members)}
-    properties: {indented_typed_identifiers(self.properties)}
-    subexprs:   {indented_typed_identifiers(self.subexprs)}
-'''
-
-
-class StructType:
-    def __init__(self, ctx: ThoriumParser.StructContext,
-                       name: str,
-                       members: List[TypedIdentifier]):
-        self.ctx = ctx
-        self.name = name
-        self.members = members
-        self.members_dict = {m.name: m.type for m in members}
-        self.z3_types = None
-
-    def declareZ3Constructor(self, z3_types):
-        self.z3_types = z3_types
-        arguments = [(id.name, z3_types(id.type)) for id in self.members]
-        z3_types(self.name).declare(f'{self.name}', *arguments)
-
-    def getPublicMemberType(self, name):
-        return self.members_dict[name]
-
-    def __call__(self, *args):
-        f = self.z3_types(self.name).__getattribute__(self.name)
-        return f(*args)
-
-    def __str__(self):
-        return self.name
-
-    def __repr__(self):
-        def indented_typed_identifiers(id_list):
-            return '\n             '.join((f'{id.name} : {id.type}' for id in id_list))
-
-        return f'''struct {self.name}
-    members: {indented_typed_identifiers(self.members)}
-'''
-
-
-class Z3Types:
-    def __init__(self):
-        unit = z3.Datatype('unit')
-        unit.declare('unit')
-        unit = unit.create()
-        self.types = {'int': z3.IntSort(),
-                      'real': z3.RealSort(),
-                      'bool': z3.BoolSort(),
-                      'unit': unit}
-        self.datatypes = []
-        self.addDatatype(Stream('int'))
-        self.addDatatype(Stream('real'))
-        self.addDatatype(Stream('bool'))
-        self.addDatatype(Stream('unit'))
-
-    def addDatatype(self, datatype):
-        self.datatypes.append(datatype)
-        self.types[str(datatype)] = z3.Datatype(str(datatype))
-        if not isinstance(datatype, Stream):
-            self.addDatatype(Stream(datatype.name))
-
-    def __call__(self, type_):
-        if isinstance(type_, Cell):
-            return self.types[str(type_.type)]
-        return self.types[str(type_)]
-
-    def finalizeDatatypes(self):
-        for datatype in self.datatypes:
-            datatype.declareZ3Constructor(self)
-        datatype_names = [str(dt) for dt in self.datatypes]
-        args = [self(name) for name in datatype_names]
-        datatypes = z3.CreateDatatypes(*args)
-        self.types.update(
-            {name: datatype for name, datatype in zip(datatype_names, datatypes)})
-
-
-class Declarations(ThoriumVisitor):
+# class Z3Types:
+#     def __init__(self):
+#         unit = z3.Datatype('unit')
+#         unit.declare('unit')
+#         unit = unit.create()
+#         self.types = {'int': z3.IntSort(),
+#                       'real': z3.RealSort(),
+#                       'bool': z3.BoolSort(),
+#                       'unit': unit}
+#         self.datatypes = []
+#         self.addDatatype(Stream('int'))
+#         self.addDatatype(Stream('real'))
+#         self.addDatatype(Stream('bool'))
+#         self.addDatatype(Stream('unit'))
+#
+#     def addDatatype(self, datatype):
+#         self.datatypes.append(datatype)
+#         self.types[str(datatype)] = z3.Datatype(str(datatype))
+#         if not isinstance(datatype, Stream):
+#             self.addDatatype(Stream(datatype.name))
+#
+#     def __call__(self, type_):
+#         if isinstance(type_, Cell):
+#             return self.types[str(type_.type)]
+#         return self.types[str(type_)]
+#
+#     def finalizeDatatypes(self):
+#         for datatype in self.datatypes:
+#             datatype.declareZ3Constructor(self)
+#         datatype_names = [str(dt) for dt in self.datatypes]
+#         args = [self(name) for name in datatype_names]
+#         datatypes = z3.CreateDatatypes(*args)
+#         self.types.update(
+#             {name: datatype for name, datatype in zip(datatype_names, datatypes)})
+
+
+class ParseDeclarations(ThoriumVisitor):
     def visitProg(self, ctx: ThoriumParser.ProgContext):
         return lmap(self.visit, ctx.decl())
 
@@ -642,438 +340,8 @@ class SubExprTypeCheck(ThoriumVisitor):
         return Cell(type_)
 
 
-class ReactiveValue:
-    def __init__(self, trace, accessor, thorium_type, z3_type):
-        self.trace = trace
-        self.accessor = accessor
-        self.thorium_type = thorium_type
-        self.z3_type = z3_type
-
-    def __call__(self, k):
-        return self.accessor(self.trace(k))
-
-    def isStream(self):
-        return isinstance(self.thorium_type, Stream)
-
-    def isNothing(self, k):
-        if self.isStream():
-            return self(k) == self.z3_type.nothing
-        return False
-
-    def isTrue(self, k):
-        if self.isStream():
-            return z3.If(self.isNothing(k), False, self.getValue(k))
-        return self(k)
-
-    def setValue(self, k, value):
-        if self.isStream():
-            return self(k) == self.z3_type.event(value)
-        return self(k) == value
-
-    def getValue(self, k, snapshot=False):
-        if self.thorium_type == Stream('unit'):
-            return z3.Not(self.isNothing(k))
-        if self.isStream():
-            return self.z3_type.value(self(k))
-        if snapshot:
-            return self(k-1)
-        return self(k)
-
-    #def __repr__(self):
-        #return f'{self.accessor}:{self.thorium_type}({self.z3_type})'
-
-
-class ReactorDefiner(ThoriumVisitor):
-    def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
-        ThoriumVisitor.__init__(self)
-        self.solver = None
-        self.trace = None
-        self.reactor_type = None
-        self.first_state = None
-        self.k0 = None
-        self.final_state = None
-        self.composite_types = composite_types
-        self.functions = functions
-        self.z3_types = z3_types
-
-        self.snapshot_trigger = False
-
-        self.unary_operators = {'-': operator.neg,
-                                'not': z3.Not}
-        self.operators = {'+': operator.add,
-                          '-': operator.sub,
-                          '*': operator.mul,
-                          '/': operator.truediv,
-                          '<': operator.lt,
-                          '<=': operator.le,
-                          '>': operator.gt,
-                          '>=': operator.ge,
-                          '==': operator.eq,
-                          '!=': operator.ne,
-                          '->': z3.Implies,
-                          'and': z3.And,
-                          'or': z3.Or,
-                          }
-
-    def expr_name(self, ctx):
-        return self.reactor_type.expr_name(ctx)
-
-    def all_states(self):
-        return range(self.first_state, self.final_state+1)
-
-    def streaming_states(self):
-        return range(self.first_state+1, self.final_state+1)
-
-    def Assert(self, statement):
-        # if 'good' in str(statement):
-        #    print(statement)
-        self.solver.add(statement)
-
-    def apply(self, f: callable,
-                    args: List[ReactiveValue],
-                    result: ReactiveValue):
-        stream_args = [arg for arg in args if arg.isStream()]
-        if stream_args:
-            self.Assert(result.isNothing(self.first_state))
-            for k in self.streaming_states():
-                missing_args = z3.Or(*[arg.isNothing(k) for arg in stream_args])
-                values = [arg.getValue(k, True) for arg in args]
-                self.Assert(z3.If(missing_args,
-                                  result.isNothing(k),
-                                  result.setValue(k, f(*values))))
-        else:
-            for k in self.all_states():
-                values = [arg.getValue(k) for arg in args]
-                self.Assert(result.setValue(k, f(*values)))
-
-    def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
-        self.reactor_type = self.composite_types[typename]
-        self.z3_reactor_type = self.z3_types(typename)
-        self.trace = z3.Function(name, z3.IntSort(), self.z3_reactor_type)
-        self.first_state = first_state
-        self.k0 = first_state
-        self.final_state = final_state
-        self.solver = solver
-        self.visit(self.reactor_type.ctx)
-        return self.trace
-
-    def visitReactor(self, ctx: ThoriumParser.ReactorContext):
-        self.visitChildren(ctx)
-
-    def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
-        result = self[self.expr_name(ctx)]
-        composite = self[self.expr_name(ctx.expr())]
-        if composite.isStream():
-            accessor = self.z3_types(base_type(composite.thorium_type)).__getattribute__(ctx.ID().getText())
-        else:
-            accessor = composite.z3_type.__getattribute__(ctx.ID().getText())
-        if composite.isStream():
-            self.Assert(result.isNothing(self.first_state))
-            for k in self.streaming_states():
-                self.Assert(z3.If(composite.isNothing(k),
-                                  result.isNothing(k),
-                                  result.setValue(k, accessor(composite.getValue(k)))))
-        else:
-            for k in self.all_states():
-                self.Assert(result(k) == accessor(composite(k)))
-        self.visit(ctx.expr())
-
-    def visitId(self, ctx: ThoriumParser.IdContext):
-        id = self[ctx.ID().getText()]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(result(k) == id(k))
-        self.visitChildren(ctx)
-
-    def visitNumber(self, ctx: ThoriumParser.NumberContext):
-        value = int(ctx.NUMBER().getText())
-        accessor = self.z3_reactor_type.__getattribute__(self.expr_name(ctx))
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(accessor(self.trace(k)) == value)
-        self.visitChildren(ctx)
-
-    def visitUnit(self, ctx:ThoriumParser.UnitContext):
-        (result,) = self.getRVs(ctx)
-        unit = self.z3_types('unit')
-        for k in self.all_states():
-            self.Assert(result(k)==unit.unit)
-
-
-    def visitBool(self, ctx: ThoriumParser.BoolContext):
-        (result,) = self.getRVs(ctx)
-        for k in self.all_states():
-            self.Assert(result(k) == bool(ctx.TRUE()))
-        self.visitChildren(ctx)
-
-    def __getitem__(self, id: str):
-        if self.reactor_type.hasMember(id):
-            thorium_type = self.reactor_type.getType(id)
-            return ReactiveValue(self.trace,
-                                 self.z3_reactor_type.__getattribute__(id),
-                                 thorium_type,
-                                 self.z3_types(thorium_type))
-        elif id in self.functions:
-            f = self.functions[id]
-            f.setSolver(self.solver)
-            return f
-        elif id in self.composite_types:
-            f = self.composite_types[id]
-            if isinstance(f, StructType):
-                return f
-
-    def unit(self,args,result):
-        stream_args = [arg for arg in args if arg.isStream()]
-        if stream_args:
-            self.Assert(result.isNothing(self.first_state))
-            for k in self.streaming_states():
-                missing_args = z3.Or(*[arg.isNothing(k) for arg in stream_args])
-                self.Assert(z3.If(missing_args,
-                                  result.isNothing(k),
-                                  result.setValue(k, self.z3_types('unit').unit)))
-        else:
-            for k in self.all_states():
-                self.Assert(result.setValue(k, self.z3_types('unit').unit))
-
-    def visitApply(self, ctx: ThoriumParser.ApplyContext):
-        args = [self[self.expr_name(expr)] for expr in ctx.expr()]
-        result = self[self.expr_name(ctx)]
-        if ctx.ID().getText()=='unit':
-            self.snapshot_trigger = True
-            self.visitChildren(ctx)
-            self.snapshot_trigger = False
-            self.unit(args,result)
-        else:
-            function = self[ctx.ID().getText()]
-            self.apply(function, args, result)
-            self.visitChildren(ctx)
-
-    def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
-        arg = self[self.expr_name(ctx.ltlProperty())]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(result.setValue(k, z3.Not(arg.isTrue(k))))
-        self.visitChildren(ctx)
-
-    def next(self, result, arg):
-        for k in self.all_states()[:-1]:
-            self.Assert(result(k) == arg.isTrue(k+1))
-        self.Assert(result(self.final_state) == True)  # optimistic semantics
-
-    def visitLtlNext(self, ctx:ThoriumParser.LtlNextContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.next(result, arg)
-        self.visitChildren(ctx)
-
-    def globally(self, result, arg):
-        for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg.isTrue(k), result(k+1)))
-        self.Assert(result(self.final_state+1) == True)  # optimistic semantics
-
-    def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.globally(result, arg)
-        self.visitChildren(ctx)
-
-    def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
-        arg = self[self.expr_name(ctx.ltlProperty())]
-        result = self[self.expr_name(ctx)]
-        for k in self.all_states():
-            self.Assert(result(k) == z3.Or(arg.isTrue(k), result.getValue(k+1)))
-        self.Assert(result(self.final_state) == False)  # optimistic semantics
-        self.visitChildren(ctx)
-
-    def visitLtlUntil(self, ctx: ThoriumParser.LtlUntilContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(result.setValue(k, z3.Or(arg1.isTrue(k), z3.And(arg0.isTrue(k), result.getValue(k+1)))))
-        self.Assert(result.setValue(self.final_state+1, True))  # optimistic semantics
-        self.visitChildren(ctx)
-
-    def since(self, p, q, S):
-        self.Assert(z3.Not(S(self.k0-1)))
-        for k in self.all_states():
-            self.Assert(S(k) == z3.Or(q.isTrue(k),
-                                           z3.And(p.isTrue(k),
-                                                  S(k-1))))
-
-    def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
-        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        since(p, q, result)
-        self.visitChildren(ctx)
-
-    def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
-        self.visitChildren(ctx)
-
-    def visitLtlAnd(self, ctx: ThoriumParser.LtlAndContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(z3.Or(arg0.isNothing(k), arg1.isNothing(k)),
-                                  result.setValue(k, False),
-                                  result.setValue(k, z3.And(arg0.getValue(k), arg1.getValue(k)))))
-        self.visitChildren(ctx)
-
-    def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(arg0.isNothing(k),
-                                  result.setValue(k, True),
-                                  result.setValue(k, z3.Implies(arg0.getValue(k), arg1.getValue(k)))))
-        self.visitChildren(ctx)
-
-    def unaryOp(self, ctx):
-        f = self.unary_operators[ctx.op.text]
-        arg0 = self[self.expr_name(ctx.expr())]
-        result = self[self.expr_name(ctx)]
-        self.apply(f, [arg0], result)
-
-    def binOp(self, ctx):
-        f = self.operators[ctx.op.text]
-        arg0 = self[self.expr_name(ctx.expr(0))]
-        arg1 = self[self.expr_name(ctx.expr(1))]
-        result = self[self.expr_name(ctx)]
-        self.apply(f, [arg0, arg1], result)
-
-    def visitNegative(self, ctx: ThoriumParser.NegativeContext):
-        self.unaryOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitChanges(self, ctx: ThoriumParser.ChangesContext):
-        expr = self[self.expr_name(ctx.expr())]
-        result = self[self.expr_name(ctx)]
-        self.Assert(result.isNothing(self.first_state))
-        for k in range(self.first_state+1, self.final_state+1):
-            self.Assert(z3.If(expr.getValue(k) != expr.getValue(k-1),
-                                  result.setValue(k, expr.getValue(k)),
-                                  result.isNothing(k)))
-        self.visitChildren(ctx)
-
-    def visitMult(self, ctx: ThoriumParser.MultContext):
-        self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitAdd(self, ctx: ThoriumParser.AddContext):
-        self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitCompare(self, ctx: ThoriumParser.CompareContext):
-        self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitEquals(self, ctx: ThoriumParser.EqualsContext):
-        self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitNot(self, ctx: ThoriumParser.NotContext):
-        if self.snapshot_trigger:
-            arg = self[self.expr_name(ctx.expr())]
-            result = self[self.expr_name(ctx)]
-            for k in range(self.first_state, self.final_state+1):
-                self.Assert(z3.If(arg.isNothing(k),
-                                  result.setValue(k, True),
-                                  result.isNothing(k)))
-        else:
-            self.unaryOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitAnd(self, ctx: ThoriumParser.AndContext):
-        if self.snapshot_trigger:
-            arg0 = self[self.expr_name(ctx.expr(0))]
-            arg1 = self[self.expr_name(ctx.expr(1))]
-            result = self[self.expr_name(ctx)]
-            for k in range(self.first_state, self.final_state+1):
-                self.Assert(z3.If(z3.Or(arg0.isNothing(k), arg1.isNothing(k)),
-                                      result.isNothing(k),
-                                      result.setValue(k, True)))
-
-        else:
-            self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitImplication(self, ctx: ThoriumParser.ImplicationContext):
-        self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def visitOr(self, ctx: ThoriumParser.AndContext):
-        if self.snapshot_trigger:
-            arg0 = self[self.expr_name(ctx.expr(0))]
-            arg1 = self[self.expr_name(ctx.expr(1))]
-            result = self[self.expr_name(ctx)]
-            for k in range(self.first_state, self.final_state+1):
-                self.Assert(z3.If(z3.And(arg0.isNothing(k), arg1.isNothing(k)),
-                                      result.isNothing(k),
-                                      result.setValue(k, True)))
-
-        else:
-            self.binOp(ctx)
-        self.visitChildren(ctx)
-
-    def snapshot(self, result, cell, stream):
-        self.Assert(result.isNothing(self.k0))
-        for k in self.streaming_states():
-            self.Assert(z3.If(stream.isNothing(k),
-                              result.isNothing(k),
-                              result.setValue(k, cell(k-1))))
-
-    def visitSnapshot(self, ctx: ThoriumParser.SnapshotContext):
-        result, (cell, stream) = self.getRVs(ctx, ctx.expr())
-        self.snapshot(result, cell, stream)
-
-        self.visit(ctx.expr(0))
-        self.snapshot_trigger = True
-        self.visit(ctx.expr(1))
-        self.snapshot_trigger = False
-
-    def merge(self, result, s1, s2):
-        self.Assert(result.isNothing(self.k0))
-        for k in self.streaming_states():
-            self.Assert(result(k) == z3.If(s1.isNothing(k),
-                                           s2(k),
-                                           s1(k)))
-
-    def visitMerge(self, ctx: ThoriumParser.MergeContext):
-        result, (s1, s2) = self.getRVs(ctx, ctx.expr())
-        self.merge(result, s1, s2)
-        self.visitChildren(ctx)
-
-    def filter(self, result, value, condition):
-        self.Assert(result.isNothing(self.k0))
-        for k in self.streaming_states():
-            self.Assert(z3.If(z3.Or(condition.isNothing(k),value.isNothing(k)),
-                              result.isNothing(k),
-                              z3.If(condition.getValue(k, True),
-                                    result.setValue(k, value.getValue(k)),
-                                    result.isNothing(k))))
-
-    def visitFilter(self, ctx: ThoriumParser.FilterContext):
-        result, (value, condition) = self.getRVs(ctx, ctx.expr())
-        self.filter(result, value, condition)
-        self.visitChildren(ctx)
-
-    def getRVs(self,*args):
-        for arg in args:
-            if isinstance(arg, list) or isinstance(arg, tuple):
-                yield self.getRVs(*arg)
-            else:
-                yield self[self.expr_name(arg)]
-
-    def hold(self, result, init, update):
-        self.Assert(result(self.k0) == init(self.k0))
-        for k in self.streaming_states():
-            self.Assert(result(k) == z3.If(update.isNothing(k),
-                                           result(k-1),
-                                           update.getValue(k)))
-
-    def visitHold(self, ctx: ThoriumParser.HoldContext):
-        result, (init, update) = self.getRVs(ctx, ctx.expr())
-        self.hold(result, init, update)
-        self.visitChildren(ctx)
-
+def named_lookup(named_items: List):
+    return {t.name: t for t in named_items}
 
 def parse_thorium_file(filename):
     input_stream = antlr4.FileStream(filename)
@@ -1082,8 +350,8 @@ def parse_thorium_file(filename):
     parser = ThoriumParser(stream)
     tree = parser.prog()
 
-    declarations = Declarations().visitProg(tree)
-    SubExprTypeCheck({t.name: t for t in declarations}).visitProg(tree)
+    declarations = ParseDeclarations().visitProg(tree)
+    SubExprTypeCheck(named_lookup(declarations)).visitProg(tree)
     z3_types = Z3Types()
     composite_types = []
     functions = []
@@ -1093,13 +361,11 @@ def parse_thorium_file(filename):
         else:
             z3_types.addDatatype(declaration)
             composite_types.append(declaration)
-    composite_types = {t.name: t for t in composite_types}
     z3_types.finalizeDatatypes()
     for f in functions:
         f.setTypeContext(z3_types)
-    functions = {f.name: f for f in functions}
 
-    return composite_types, functions, z3_types
+    return named_lookup(composite_types), named_lookup(functions), z3_types
 
 
 def main(_argv):
@@ -1108,9 +374,9 @@ def main(_argv):
                                         description='Verifies reactor properties.')
 
     argparser.add_argument('filename')
-    argparser.add_argument('-r', '--reactor', dest='reactor')
-    argparser.add_argument('-p', '--property', dest='property')
-    argparser.add_argument('-n', '--num-states', dest='N', type=int)
+    argparser.add_argument('-r', '--reactor', dest='reactor', required=True)
+    argparser.add_argument('-p', '--property', dest='property', required=True)
+    argparser.add_argument('-n', '--num-states', dest='N', type=int, required=True)
     argparser.add_argument('-f', '--full-model', dest='full_model', action='store_true', default=False)
 
     args = argparser.parse_args()
@@ -1134,7 +400,7 @@ def main(_argv):
     # print(solver.statistics())
     # print(solver.statistics().keys())
 
-    print(f"Time      : {solver.statistics().get_key_value('time')}")
+    print(f"Time      : {solver.statistics().get_key_value('time')} seconds")
     print(f"Max memory: {solver.statistics().get_key_value('max memory')}")
 
     if verification_result == z3.sat:
