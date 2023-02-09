@@ -10,10 +10,9 @@ from thorium.reactivetypes import *
 from thorium.decls import *
 from thorium.reactor_definer import ReactorDefiner
 
+
 def lmap(f, iterable):
     return list(map(f, iterable))
-
-
 
 
 # class Z3Types:
@@ -132,7 +131,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.reactor.set_expr_name(ctx, name)
 
     def visitSubExpr(self, ctx, sub=None):
-        if not sub:   # todo: move to param list
+        if not sub:  # todo: move to param list
             sub = ctx.expr()
         self.set_expr_name(sub, f'{self.expr_name(ctx)}-1')
         type_ = self.visit(sub)
@@ -144,7 +143,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         if not subs:
             subs = ctx.expr()
         for i, sub in enumerate(subs):
-            self.set_expr_name(sub, f'{self.expr_name(ctx)}-{i+1}')
+            self.set_expr_name(sub, f'{self.expr_name(ctx)}-{i + 1}')
             type_ = self.visit(sub)
             types.append(type_)
             self.reactor.addSubExpr(sub, type_)
@@ -182,7 +181,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.set_expr_name(ctx.ltlProperty(), self.expr_name(ctx))
         return self.visit(ctx.ltlProperty())
 
-    def visitLtlNext(self, ctx:ThoriumParser.LtlNextContext):
+    def visitLtlNext(self, ctx: ThoriumParser.LtlNextContext):
         self.visitSubExpr(ctx, ctx.ltlProperty())
         return Cell('bool')
 
@@ -198,7 +197,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.visitSubExprs(ctx, ctx.ltlProperty())
         return Cell('bool')
 
-    def visitLtlSince(self, ctx:ThoriumParser.LtlSinceContext):
+    def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         self.visitSubExprs(ctx, ctx.ltlProperty())
         return Cell('bool')
 
@@ -220,7 +219,7 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         types = self.visitSubExprs(ctx)
-        if ctx.ID().getText()=='unit':
+        if ctx.ID().getText() == 'unit':
             result_type = 'unit'
         else:
             f = self.decls[ctx.ID().getText()]
@@ -261,10 +260,10 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitNumber(self, ctx: ThoriumParser.NumberContext):
         return 'int'
 
-    def visitUnit(self, ctx:ThoriumParser.UnitContext):
+    def visitUnit(self, ctx: ThoriumParser.UnitContext):
         return 'unit'
 
-    def visitBool(self, ctx:ThoriumParser.BoolContext):
+    def visitBool(self, ctx: ThoriumParser.BoolContext):
         return 'bool'
 
     def visitParen(self, ctx: ThoriumParser.ParenContext):
@@ -343,6 +342,7 @@ class SubExprTypeCheck(ThoriumVisitor):
 def named_lookup(named_items: List):
     return {t.name: t for t in named_items}
 
+
 def parse_thorium_file(filename):
     input_stream = antlr4.FileStream(filename)
     lexer = ThoriumLexer(input_stream)
@@ -369,7 +369,6 @@ def parse_thorium_file(filename):
 
 
 def main(_argv):
-
     argparser = argparse.ArgumentParser(prog='thorium-verifier',
                                         description='Verifies reactor properties.')
 
@@ -413,7 +412,7 @@ def main(_argv):
         else:
             namegetter = thorium_reactor.getDeclaredMemberNames
             getter = thorium_reactor.getDeclaredMemberValues
-        for k in range(args.N+1):
+        for k in range(args.N + 1):
             if k in f:
                 trace.append(getter(f[k]))
             else:
@@ -423,9 +422,9 @@ def main(_argv):
         column_widths = [max([len(name) for name in column]) for column in trace]
         format_string = ' & '.join(('%%%ds' % width) for width in column_widths) + r' \\'
         print(r'\begin{centering}')
-        print(r'\begin{tabular}{%s}' % ('|c'*len(column_widths)+'|'))
+        print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
         print(r'\hline')
-        print(format_string % tuple(['k']+ list(range(len(column_widths)-1))))
+        print(format_string % tuple(['k'] + list(range(len(column_widths) - 1))))
         print(r'\hline')
         for row in [[t[i] for t in trace] for i in range(len(trace[0]))]:
             print(format_string % tuple(row))
