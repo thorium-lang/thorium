@@ -1,4 +1,3 @@
-from thorium.thorium import *
 from thorium.ThoriumLexer import *
 from thorium.ThoriumListener import *
 from thorium.ThoriumParser import *
