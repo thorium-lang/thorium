@@ -13,12 +13,13 @@ struct Response {
 
 reactor Worker(id: cell int, input: stream Command) {
     assigned:  stream int      = ID @ input if input.request and not busy;
-    released:  stream int      = ID @ input if input.disconnect and input.id==ID;
+    released:  stream int      = ID @ input if input.disconnect and input.worker_id==ID;
     response:  stream Response = Response(ID, true, false) if busy and input.query
-                               | Response(ID, false, true) if released
-    unhandled: stream Command  = Command if not unit(assigned or released or reply)
+                               | Response(ID, false, true) if released;
+    unhandled: stream Command  = input if not unit(assigned or released or response);
+
+    ID: cell int = id .. 1 @ input if false;
 private:
-    ID: cell int = id .. 1 @ input | if false;
     busy: cell bool = false .. true  @ assigned
                              | false @ released
 }
@@ -46,5 +47,5 @@ properties:
     diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
                   G (resource_unavailable => (count==3));
     orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G ((responseA.reply) => ((not responseA.disconnect) S (assigned_worker_id==workerA.id)));
+                  G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
 }
