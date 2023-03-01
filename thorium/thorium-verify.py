@@ -66,7 +66,7 @@ def main(_argv):
 
     property_ = reactor_type.__getattribute__(args.property)
 
-    solver.add(z3.Not(property_(reactor(0))))
+    solver.add(z3.Not(property_(reactor[0])))
 
     verification_result = solver.check()
 
@@ -78,7 +78,7 @@ def main(_argv):
 
     if verification_result == z3.sat:
         z3_trace = solver.model()[reactor]
-        f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
+        #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
         trace = []
         if args.full_model:
             namegetter = thorium_reactor.getMemberNames
@@ -87,10 +87,7 @@ def main(_argv):
             namegetter = thorium_reactor.getDeclaredMemberNames
             getter = thorium_reactor.getDeclaredMemberValues
         for k in range(args.N + 1):
-            if k in f:
-                trace.append(getter(f[k]))
-            else:
-                trace.append(getter(z3_trace.else_value()))
+            trace.append(getter(solver.model().eval(z3_trace[k])))
 
         trace = [namegetter()] + trace
         column_widths = [max([len(name) for name in column]) for column in trace]

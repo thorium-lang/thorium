@@ -55,7 +55,7 @@ class ReactorDefiner(ThoriumVisitor):
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
-        self.trace = z3.Function(name, z3.IntSort(), self.z3_reactor_type)
+        self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state
@@ -95,7 +95,7 @@ class ReactorDefiner(ThoriumVisitor):
         value = int(ctx.NUMBER().getText())
         accessor = self.z3_reactor_type.__getattribute__(self.expr_name(ctx))
         for k in range(self.first_state, self.final_state+1):
-            self.Assert(accessor(self.trace(k)) == value)
+            self.Assert(accessor(self.trace[k]) == value)
         self.visitChildren(ctx)
 
     def visitUnit(self, ctx:ThoriumParser.UnitContext):

@@ -37,7 +37,7 @@ class ReactiveValue:
         self.z3_type = z3_type
 
     def __call__(self, k):
-        return self.accessor(self.trace(k))
+        return self.accessor(self.trace[k])
 
     def isStream(self):
         return isinstance(self.thorium_type, Stream)
