@@ -5,7 +5,7 @@ from typing import List
 import z3
 from thorium.reactivetypes import ReactiveValue
 from thorium.reactivetypes import base_type
-from thorium.decls import StructType
+from thorium.decls import StructType,ReactorType
 
 
 class ReactorDefiner(ThoriumVisitor):
@@ -126,6 +126,8 @@ class ReactorDefiner(ThoriumVisitor):
             f = self.composite_types[id]
             if isinstance(f, StructType):
                 return f
+            if isinstance(f, ReactorType):
+                return f
 
     def unit(self,args,result):
         stream_args = [arg for arg in args if arg.isStream()]
@@ -148,9 +150,13 @@ class ReactorDefiner(ThoriumVisitor):
             SnapshotTrigger(self).visitChildren(ctx)
             self.unit(args,result)
         else:
-            function = self[ctx.ID().getText()]
-            self.apply(function, args, result)
-            self.visitChildren(ctx)
+            callable = self[ctx.ID().getText()]
+            if isinstance(callable, ReactorType):
+                #do composition
+                raise Exception("Reactor composition not yet supported.")
+            else:
+                self.apply(callable, args, result)
+                self.visitChildren(ctx)
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
         arg = self[self.expr_name(ctx.ltlProperty())]
