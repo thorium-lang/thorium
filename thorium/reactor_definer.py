@@ -30,14 +30,15 @@ class ReactorDefiner(ThoriumVisitor):
     def streaming_states(self):
         return range(self.first_state+1, self.final_state+1)
 
-    def Assert(self, statement):
-        # if 'good' in str(statement):
-        #    print(statement)
-        self.solver.add(statement)
+    def Assert(self, statement, debug=False):
+        if debug:
+            print(statement)
+        return self.solver.add(statement)
 
     def apply(self, f: callable,
               args: List[ReactiveValue],
-              result: ReactiveValue):
+              result: ReactiveValue,
+              debug: bool=False):
         stream_args = [arg for arg in args if arg.isStream()]
         if stream_args:
             self.Assert(result.isNothing(self.first_state))
@@ -46,7 +47,7 @@ class ReactorDefiner(ThoriumVisitor):
                 values = [arg.getValue(k, True) for arg in args]
                 self.Assert(z3.If(missing_args,
                                   result.isNothing(k),
-                                  result.setValue(k, f(*values))))
+                                  result.setValue(k, f(*values))), debug)
         else:
             for k in self.all_states():
                 values = [arg.getValue(k) for arg in args]
@@ -130,17 +131,36 @@ class ReactorDefiner(ThoriumVisitor):
                 return f
 
     def unit(self,args,result):
-        stream_args = [arg for arg in args if arg.isStream()]
-        if stream_args:
-            self.Assert(result.isNothing(self.first_state))
-            for k in self.streaming_states():
-                missing_args = z3.Or(*[arg.isNothing(k) for arg in stream_args])
-                self.Assert(z3.If(missing_args,
-                                  result.isNothing(k),
-                                  result.setValue(k, self.z3_types('unit').unit)))
-        else:
-            for k in self.all_states():
-                self.Assert(result.setValue(k, self.z3_types('unit').unit))
+        for k in self.streaming_states():
+            missing_args = z3.Or(*[arg.isNothing(k) for arg in args])
+            self.Assert(z3.If(missing_args,
+                              result.isNothing(k),
+                              result.setValue(k, self.z3_types('unit').unit)))
+
+    def active(self,args,result):
+        for k in self.all_states():
+            missing_args = z3.Or(*[arg.isNothing(k) for arg in args])
+            self.Assert(result.setValue(k,z3.Not(missing_args)))
+
+    def inactive(self,args,result):
+        for k in self.all_states():
+            missing_args = z3.Or(*[arg.isNothing(k) for arg in args])
+            self.Assert(result.setValue(k,missing_args))
+
+    def constructReactor(self,
+                         name: str,
+                         reactortype: ReactorType,
+                         args: List[ReactiveValue],
+                         result: ReactiveValue,
+                         start_state: int):
+        definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types)
+        instancename = f'{name}-{reactortype.name}-{start_state}'
+        trace = definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
+        for k in range(start_state, self.final_state+1):
+            self.Assert(result.setValue(k,trace[k]))
+        for param,arg in zip([definer[name] for name in reactortype.getParamNames()],args):
+            for k in range(start_state, self.final_state+1):
+                self.Assert(param(k)==arg(k))
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]
@@ -149,14 +169,21 @@ class ReactorDefiner(ThoriumVisitor):
             from thorium.snapshot_trigger import SnapshotTrigger
             SnapshotTrigger(self).visitChildren(ctx)
             self.unit(args,result)
+        elif ctx.ID().getText()=='active':
+            from thorium.snapshot_trigger import SnapshotTrigger
+            SnapshotTrigger(self).visitChildren(ctx)
+            self.active(args,result)
+        elif ctx.ID().getText()=='inactive':
+            from thorium.snapshot_trigger import SnapshotTrigger
+            SnapshotTrigger(self).visitChildren(ctx)
+            self.inactive(args,result)
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):
-                #do composition
-                raise Exception("Reactor composition not yet supported.")
+                self.constructReactor(self.expr_name(ctx), callable, args, result, 0)
             else:
                 self.apply(callable, args, result)
-                self.visitChildren(ctx)
+            self.visitChildren(ctx)
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
         arg = self[self.expr_name(ctx.ltlProperty())]
@@ -248,6 +275,8 @@ class ReactorDefiner(ThoriumVisitor):
         arg0 = self[self.expr_name(ctx.expr(0))]
         arg1 = self[self.expr_name(ctx.expr(1))]
         result = self[self.expr_name(ctx)]
+        if self.expr_name(ctx) == 'test':
+            self.apply(f, [arg0, arg1], result, debug=True)
         self.apply(f, [arg0, arg1], result)
 
     def visitNegative(self, ctx: ThoriumParser.NegativeContext):

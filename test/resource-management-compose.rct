@@ -12,27 +12,24 @@ struct Response {
 }
 
 reactor Worker(id: cell int, input: stream Command) {
-    assigned:  stream int      = ID @ input if input.request and not busy;
-    released:  stream int      = ID @ input if input.disconnect and input.worker_id==ID;
-    response:  stream Response = Response(ID, true, false) if busy and input.query
-                               | Response(ID, false, true) if released;
-    unhandled: stream Command  = input if not unit(assigned or released or response);
+    assigned:  stream int      = ID if input.request and not busy;
+    released:  stream int      = ID if myCommand.disconnect;
+    unhandled: stream Command  = input if not (active(assigned) or active(myCommand));
 
     ID: cell int = id .. 1 @ input if false;
 private:
     busy: cell bool = false .. true  @ assigned
-                             | false @ released
+                             | false @ released;
+    myCommand: stream Command = input if busy and input.worker_id == ID and not input.request;
 }
 
 function simultaneous(a: bool, b: bool, c: bool) -> bool {
     result == ((a and b) or (b and c) or (a and c));
 }
 
-reactor manager(input: stream Command) {
-    resource_unavailable: stream unit = unit(request and not assigned_worker_id);
-    response: stream Response = workerA.response | workerB.response | workerC.response;
+reactor manager(input: stream Command, input2: cell int) {
+    resource_unavailable: stream bool = active(unhandled) if unhandled.request;
 private:
-    request:    stream Command = input if input.request;
 
     workerA: cell Worker = Worker(0, input);
     workerB: cell Worker = Worker(1, workerA.unhandled);
@@ -41,11 +38,15 @@ private:
     assigned_worker_id: stream int = workerA.assigned | workerB.assigned | workerC.assigned;
     released_worker_id: stream int = workerA.released | workerB.released | workerC.released;
 
+    unhandled: stream Command = workerC.unhandled;
+
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
+    valid: G (active(resource_unavailable) => (count == 2));
+
     diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G (resource_unavailable => (count==3));
-    orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
+                  G (resource_unavailable => (count==4));
+    //orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
+    //              G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
 }

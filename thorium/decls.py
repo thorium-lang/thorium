@@ -158,23 +158,32 @@ class ReactorType:
 
     def getDeclaredMemberValues(self, z3_instance):
         def pretty(s: str):
+            if '\n' in s:
+                return 'instance'
             import re
-            event = re.findall(r'event\((.+)\)', s)
+            event = re.findall(r'^\s*event\((.+)\)', s)
             if event:
-                return f'[{event[0]}]'  # .replace('unit', '()')
-            return s.replace('nothing', '[]')
+                return f'{event[0]}'  # .replace('unit', '()')
+                #return f'[{event[0]}]'  # .replace('unit', '()')
+            return s.replace('nothing', '')
+            #return s.replace('nothing', '[]')
         return [pretty(f'{z3_instance.arg(i)}') for i in
                 range(len(self.getDeclaredMemberNames()))]
 
     def getMemberValues(self, z3_instance):
         def pretty(s: str):
+            if '\n' in s:
+                return 'instance'
             import re
             event = re.findall(r'event\((.+)\)', s)
             if event:
-                return f'[{event[0]}]'  # .replace('unit', '()')
-            return s.replace('nothing', '[]')
+                return f'{event[0]}'  # .replace('unit', '()')
+            return s.replace('nothing', '')
         return [pretty(f'{z3_instance.arg(i)}') for i in
                 range(len(self.getMemberNames()))]
+
+    def getParamNames(self):
+        return [p.name for p in self.params]
 
     def getParamType(self, i):
         return self.params[i].type

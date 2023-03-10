@@ -110,14 +110,17 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         types = self.visitSubExprs(ctx)
+        if ctx.ID().getText() in ['active','inactive']:
+            return Stream('bool')
         if ctx.ID().getText() == 'unit':
-            result_type = 'unit'
+            return Stream('unit')
+
+        f = self.decls[ctx.ID().getText()]
+        if isinstance(f, Function):
+            result_type = f.result_type
         else:
-            f = self.decls[ctx.ID().getText()]
-            if isinstance(f, Function):
-                result_type = f.result_type
-            else:  # struct, for now
-                result_type = f.name
+            result_type = f.name
+            #TODO: handle reactors properly, the type should be Array[f.name]
         if hasStreamType(types):
             return Stream(result_type)
         return result_type
