@@ -58,6 +58,7 @@ class ReactiveValue:
         return self(k) == value
 
     def getValue(self, k, snapshot=False):
+        # special case, 'unit' presence is treated as True
         if self.thorium_type == Stream('unit'):
             return z3.Not(self.isNothing(k))
         if self.isStream():

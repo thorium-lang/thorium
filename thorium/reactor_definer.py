@@ -60,9 +60,14 @@ class ReactorDefiner(ThoriumVisitor):
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state
+        self.kK = final_state
         self.solver = solver
         self.visit(self.reactor_type.ctx)
         return self.trace
+
+    def visitReactorProperty(self, ctx:ThoriumParser.ReactorPropertyContext):
+        from thorium.property_definer import PropertyDefiner
+        PropertyDefiner(self).visitChildren(ctx)
 
     def visitReactor(self, ctx: ThoriumParser.ReactorContext):
         self.visitChildren(ctx)
@@ -184,85 +189,6 @@ class ReactorDefiner(ThoriumVisitor):
             else:
                 self.apply(callable, args, result)
             self.visitChildren(ctx)
-
-    def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
-        arg = self[self.expr_name(ctx.ltlProperty())]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(result.setValue(k, z3.Not(arg.isTrue(k))))
-        self.visitChildren(ctx)
-
-    def next(self, result, arg):
-        for k in self.all_states()[:-1]:
-            self.Assert(result(k) == arg.isTrue(k+1))
-        self.Assert(result(self.final_state) == True)  # optimistic semantics
-
-    def visitLtlNext(self, ctx:ThoriumParser.LtlNextContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.next(result, arg)
-        self.visitChildren(ctx)
-
-    def globally(self, result, arg):
-        for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg.isTrue(k), result(k+1)))
-        self.Assert(result(self.final_state+1) == True)  # optimistic semantics
-
-    def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.globally(result, arg)
-        self.visitChildren(ctx)
-
-    def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
-        arg = self[self.expr_name(ctx.ltlProperty())]
-        result = self[self.expr_name(ctx)]
-        for k in self.all_states():
-            self.Assert(result(k) == z3.Or(arg.isTrue(k), result.getValue(k+1)))
-        self.Assert(result(self.final_state) == False)  # optimistic semantics
-        self.visitChildren(ctx)
-
-    def visitLtlUntil(self, ctx: ThoriumParser.LtlUntilContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(result.setValue(k, z3.Or(arg1.isTrue(k), z3.And(arg0.isTrue(k), result.getValue(k+1)))))
-        self.Assert(result.setValue(self.final_state+1, True))  # optimistic semantics
-        self.visitChildren(ctx)
-
-    def since(self, p, q, S):
-        self.Assert(z3.Not(S(self.k0-1)))
-        for k in self.all_states():
-            self.Assert(S(k) == z3.Or(q.isTrue(k),
-                                      z3.And(p.isTrue(k),
-                                             S(k-1))))
-
-    def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
-        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        self.since(p, q, result)
-        self.visitChildren(ctx)
-
-    def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
-        self.visitChildren(ctx)
-
-    def visitLtlAnd(self, ctx: ThoriumParser.LtlAndContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(z3.Or(arg0.isNothing(k), arg1.isNothing(k)),
-                              result.setValue(k, False),
-                              result.setValue(k, z3.And(arg0.getValue(k), arg1.getValue(k)))))
-        self.visitChildren(ctx)
-
-    def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
-        arg0 = self[self.expr_name(ctx.ltlProperty(0))]
-        arg1 = self[self.expr_name(ctx.ltlProperty(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(arg0.isNothing(k),
-                              result.setValue(k, True),
-                              result.setValue(k, z3.Implies(arg0.getValue(k), arg1.getValue(k)))))
-        self.visitChildren(ctx)
 
     def unaryOp(self, ctx):
         f = Operators.unary[ctx.op.text]

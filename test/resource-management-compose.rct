@@ -43,10 +43,10 @@ private:
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
-    valid: G (active(resource_unavailable) => (count == 2));
+    valid: G (resource_unavailable -> (count == 3));
 
-    diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G (resource_unavailable => (count==4));
+    diligent: G not simultaneous (input.request, input.query, input.disconnect) ->
+                  G (resource_unavailable => (count==3));
     //orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
     //              G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
 }
