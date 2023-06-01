@@ -1,0 +1,52 @@
+message Command {
+    Request
+  | Query      { id: int }
+  | Disconnect { id: int }
+}
+
+message Response {
+    Reply { id: int }
+  | Disconnect { id: int }
+}
+
+reactor manager(input: stream Command, input2: cell int) {
+    resource_unavailable: stream bool = active(unhandled) if unhandled.request;
+private:
+
+    active: cell [Worker] = [] .. active.insert(assigned)
+                                | active.remove(released);
+    idle:   cell [Worker] = [] .. idle.insert(released)
+                                | idle.remove(assigned);
+
+    assigned: stream Worker = idle[0] @ input.Request if not empty(idle);
+    released: stream Worker = [w for w in assigned if w.id == output.Disconnect.id][0];
+
+    assigned_worker_id: stream int = workerA.assigned | workerB.assigned | workerC.assigned;
+    released_worker_id: stream int = workerA.released | workerB.released | workerC.released;
+
+    unhandled: stream Command = workerC.unhandled;
+
+    count: cell int = 0 .. count + ( 1 @ assigned_worker_id
+                                   |-1 @ released_worker_id);
+properties:
+    valid: G (resource_unavailable -> (count == 3));
+
+    diligent: G (resource_unavailable => (count==3));
+    orderly:  G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
+}
+
+reactor Worker(id: cell int, input: stream Command) {
+    assigned:  stream int      = ID if input.request and not busy;
+    released:  stream int      = ID if myCommand.disconnect;
+    unhandled: stream Command  = input if not (active(assigned) or active(myCommand));
+
+    ID: cell int = id .. 1 @ input if false;
+private:
+    busy: cell bool = false .. true  @ assigned
+                             | false @ released;
+    myCommand: stream Command = input if busy and input.worker_id == ID and not input.request;
+}
+
+function simultaneous(a: bool, b: bool, c: bool) -> bool {
+    result == ((a and b) or (b and c) or (a and c));
+}
