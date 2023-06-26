@@ -1,51 +1,37 @@
-struct Test {
-  t : int,
-  e : real
-}
-
 type Command {
     Request
-  | Reconfigure{ id: int, value: int}
-  | Query{       id: int}
-  | Disconnect{  id: int}
-}
-
-match command {
-   Request -> {},
-   Query(worker_id) -> {},
-   Disconnect(worker_id) -> {}
+  | Query       { id: int }
+  | Disconnect  { id: int }
 }
 
 type Response {
-    Reply{     id: int}
-  | Disconnect{id: int}
+    Reply      { id: int }
+  | Disconnect { id: int }
 }
 
-reactor Worker(id: int, input: stream Command) {
-    assigned:  stream int      = ID when Request(input) and not busy;
-    released:  stream int      = ID when Disconnect(myCommand).id == ID;
-    unhandled: stream Command  = input when not (active(assigned) or active(myCommand));
+reactor AbstractWorker {
+    response: Stream Response;
+}
+
+reactor Worker(id:       int,
+               input:    stream Command,
+               assigned: stream unit,
+               released: stream unit) {
+    response: stream Response = Response::Reply(id) when x == ID
+                                    when input matches Command.Query(x);
 
 private:
     ID: cell int = id;
-    busy: cell bool = false .. true  @ assigned
-                             | false @ released;
-    myCommand: stream Command = input if busy and (Query(input).id|Disconnect(input).id)==ID;
-property:
-    available: G (busy == not released S assigned);
 }
 
-function simultaneous(a: bool, b: bool, c: bool) -> bool {
-    result == ((a and b) or (b and c) or (a and c));
-}
-
-reactor manager(input: stream Command, input2: cell int) {
-    resource_unavailable: stream bool = active(unhandled) if unhandled.request;
+reactor manager(input: stream Command) {
+    resource_unavailable: stream bool = true when
+                          unhandled matches Command::Request;
 private:
 
-    workerA: cell Worker = Worker(0, input);
-    workerB: cell Worker = Worker(1, workerA.unhandled);
-    workerC: cell Worker = Worker(2, workerB.unhandled);
+    workerA: cell AbstractWorker = Worker(0, input);
+    workerB: cell AbstractWorker = Worker(1, input);
+    workerC: cell AbstractWorker = Worker(2, input);
 
     available_worker: stream A = workerA @ Request(input) unless workerA.busy
                                | workerB @ Request(input) unless workerB.busy
@@ -54,15 +40,12 @@ private:
     assigned_worker_id: stream int = workerA.assigned | workerB.assigned | workerC.assigned;
     released_worker_id: stream int = workerA.released | workerB.released | workerC.released;
 
-    unhandled: stream Command = workerC.unhandled;
+    unhandled: stream Command = input when workerA.response
 
     count: cell int = 0 .. count + ( 1 @ assigned_worker_id
                                    |-1 @ released_worker_id);
 properties:
     valid: G (resource_unavailable -> (count == 3));
 
-    diligent: G not simultaneous (input.request, input.query, input.disconnect) ->
-                  G (resource_unavailable => (count==3));
-    //orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
-    //              G ((workerA.response.reply) => ((not workerA.response.disconnect) S (assigned_worker_id==workerA.ID)));
+    diligent: G (resource_unavailable => (count==3));
 }

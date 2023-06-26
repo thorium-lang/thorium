@@ -11,9 +11,10 @@ def hasStreamType(types):
 
 
 class SubExprTypeCheck(ThoriumVisitor):
-    def __init__(self, decls):
+    def __init__(self, decls, debug=False):
         self.decls = decls
         self.reactor = None
+        self.debug = debug
 
     def expr_name(self, ctx):
         return self.reactor.expr_name(ctx)
@@ -143,7 +144,13 @@ class SubExprTypeCheck(ThoriumVisitor):
         return member_type
 
     def visitId(self, ctx: ThoriumParser.IdContext):
-        return self.reactor.getType(ctx.ID().getText())
+        ID = ctx.ID().getText()
+        if ID in self.decls:
+            return ID
+        # captures enum constructors; could this be handled more generally?
+        if '::' in ID:
+            return ID
+        return self.reactor.getType(ID)
 
     def visitChanges(self, ctx: ThoriumParser.ChangesContext):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')

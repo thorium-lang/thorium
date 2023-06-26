@@ -3,7 +3,8 @@ from thorium.reactivetypes import Stream
 from thorium.reactivetypes import Cell
 
 class Z3Types:
-    def __init__(self):
+    def __init__(self, debug=False):
+        self.debug = debug
         unit = z3.Datatype('unit')
         unit.declare('unit')
         unit = unit.create()
@@ -25,7 +26,12 @@ class Z3Types:
 
     def __call__(self, type_):
         if isinstance(type_, Cell):
-            return self.types[str(type_.type)]
+            return self(str(type_.type))
+            #return self.types[str(type_.type)]
+        typename = str(type_)
+        parent_typename = '::'.join(typename.split('::')[:-1])
+        if typename not in self.types and parent_typename in self.types:
+            return self.types[parent_typename]
         return self.types[str(type_)]
 
     def finalizeDatatypes(self):
@@ -36,3 +42,7 @@ class Z3Types:
         datatypes = z3.CreateDatatypes(*args)
         self.types.update(
             {name: datatype for name, datatype in zip(datatype_names, datatypes)})
+        if self.debug:
+            for typename in self.types:
+                print(f'datatype {typename}')
+

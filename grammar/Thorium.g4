@@ -2,15 +2,23 @@ grammar Thorium;
 
 prog: decl*;
 
-decl: struct
-    | enum
+decl: datatype
     | function
     | reactor
     ;
 
-struct: STRUCT ID LBRACE structMembers? RBRACE ;
+datatype: DATATYPE ID (enum|struct);
 
-enum:     ENUM ID LBRACE enumMembers? RBRACE ;
+struct: LBRACE structMembers RBRACE ;
+enum:   LBRACE enumMembers RBRACE ;
+
+structMembers: structMember (COMMA structMember)* COMMA?;
+
+structMember: ID COLON (enum|struct|type) ;
+
+enumMembers: enumMember (PIPE enumMember)* ;
+
+enumMember: ID (struct|enum| COLON type)? ;
 
 function: FUNCTION ID LPAREN functionParams? RPAREN '->' type LBRACE
     functionProperties?
@@ -43,16 +51,6 @@ reactorMember: ID COLON reactiveType EQUALS expr;
 reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
 
 reactorProperty: ID COLON property;
-
-structMembers: structMember (COMMA structMember)* COMMA?;
-
-structMember: ID COLON type ;
-
-enumMembers: enumMember (COMMA enumMember)* ;
-
-enumMember: ID COLON type ;
-
-enumParams: type (COMMA type)* ;
 
 reactiveType: (CELL|STREAM) type;
 
@@ -150,8 +148,7 @@ FORALL     : 'forall' ;
 EXISTS     : 'exists' ;
 CELL       : 'cell' ;
 STREAM     : 'stream' ;
-STRUCT     : 'struct' ;
-ENUM       : 'enum' ;
+DATATYPE   : 'datatype' ;
 REACTOR    : 'reactor' ;
 FUNCTION   : 'function' ;
 PRIVATE    : 'private:' ;
@@ -165,7 +162,7 @@ fragment NUM : [0-9] ;
 UNIT   : '()' ;
 TRUE   : 'true' ;
 FALSE  : 'false' ;
-ID : ALPHA ALPHANUM* ;
+ID : ALPHA (ALPHANUM|'::')* ;
 NUMBER : NUM+ ;
 
 COMMENT    : '/*' .*? '*/' -> skip ;

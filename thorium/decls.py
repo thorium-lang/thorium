@@ -1,7 +1,9 @@
+from __future__ import annotations
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.operators import Operators
 import z3
-from typing import List
+from typing import List, Union, Optional
+
 
 class TypedIdentifier:
     def __init__(self, name, type_):
@@ -63,7 +65,6 @@ class Function(ThoriumVisitor):
 
     def visitFunctionProperty(self, ctx: ThoriumParser.FunctionPropertyContext):
         property = self.visit(ctx.expr())
-        # print(f'function property {property}')
         self.solver.add(property)
 
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
@@ -142,7 +143,7 @@ class ReactorType:
 
     def declareZ3Constructor(self, type_ctx):
         arguments = []
-        for id in self.params+self.public_members+self.private_members+self.properties+self.subexprs:
+        for id in self.params + self.public_members + self.private_members + self.properties + self.subexprs:
             arguments.append((id.name, type_ctx(id.type)))
         type_ctx(self.name).declare(f'{self.name}', *arguments)
 
@@ -151,10 +152,11 @@ class ReactorType:
             print(f'{id.name:>20s} : {z3_instance.arg(i)}')
 
     def getMemberNames(self):
-        return [id.name for id in self.params+self.public_members+self.private_members+self.properties+self.subexprs]
+        return [id.name for id in
+                self.params + self.public_members + self.private_members + self.properties + self.subexprs]
 
     def getDeclaredMemberNames(self):
-        return [id.name for id in self.params+self.public_members+self.private_members]
+        return [id.name for id in self.params + self.public_members + self.private_members]
 
     def getDeclaredMemberValues(self, z3_instance):
         def pretty(s: str):
@@ -164,9 +166,10 @@ class ReactorType:
             event = re.findall(r'^\s*event\((.+)\)', s)
             if event:
                 return f'{event[0]}'  # .replace('unit', '()')
-                #return f'[{event[0]}]'  # .replace('unit', '()')
+                # return f'[{event[0]}]'  # .replace('unit', '()')
             return s.replace('nothing', '')
-            #return s.replace('nothing', '[]')
+            # return s.replace('nothing', '[]')
+
         return [pretty(f'{z3_instance.arg(i)}') for i in
                 range(len(self.getDeclaredMemberNames()))]
 
@@ -179,6 +182,7 @@ class ReactorType:
             if event:
                 return f'{event[0]}'  # .replace('unit', '()')
             return s.replace('nothing', '')
+
         return [pretty(f'{z3_instance.arg(i)}') for i in
                 range(len(self.getMemberNames()))]
 
@@ -235,7 +239,7 @@ class StructType:
         self.ctx = ctx
         self.name = name
         self.members = members
-        self.members_dict = {m.name: m.type for m in members}
+        self.members_dict = {}
         self.z3_types = None
 
     def declareZ3Constructor(self, z3_types):
@@ -246,6 +250,16 @@ class StructType:
     def getPublicMemberType(self, name):
         return self.members_dict[name]
 
+    def finalize_datatypes(self):
+        datatypes = [self]
+        for member in self.members:
+            if isinstance(member.type, StructType) or \
+               isinstance(member.type, EnumType):
+                datatypes.extend(member.type.finalize_datatypes())
+                member.type = member.type.name
+        self.members_dict = {m.name: m.type for m in self.members}
+        return datatypes
+
     def __call__(self, *args):
         f = self.z3_types(self.name).__getattribute__(self.name)
         return f(*args)
@@ -254,10 +268,70 @@ class StructType:
         return self.name
 
     def __repr__(self):
-        def indented_typed_identifiers(id_list):
-            return '\n             '.join((f'{id.name} : {id.type}' for id in id_list))
+        m = '\n'.join([repr(m) for m in self.members])
+        m = m.replace('\n', '\n     ')
+        return f'struct {m}'
 
-        return f'''struct {self.name}
-    members: {indented_typed_identifiers(self.members)}
-'''
 
+class EnumMember:
+    def __init__(self, ctx: ThoriumParser.EnumMemberContext,
+                 name: str,
+                 arguments: Optional[Union[StructType, EnumType]]):
+        self.ctx = ctx
+        self.name = name
+        self.arguments = arguments
+
+    def __repr__(self):
+        if self.arguments:
+            a = self.arguments.replace('\n', '\n'+' '*(len(self.name)+1))
+            return f'{self.name} {a}'
+        return self.name
+
+
+class EnumType:
+    def __init__(self,
+                 ctx: ThoriumParser.EnumContext,
+                 name: str,
+                 members: List[TypedIdentifier]):
+        self.ctx = ctx
+        self.members = members
+        self.members_dict = {}
+        self.name = name
+
+    def finalize_datatypes(self):
+        datatypes = [self]
+        for member in self.members:
+            if isinstance(member.type, StructType) or \
+                   isinstance(member.type, EnumType):
+                datatypes.extend(member.type.finalize_datatypes())
+                if isinstance(member.type, EnumType):
+                    member.type = member.type.name
+        self.members_dict = {m.name: m.type for m in self.members}
+        return datatypes
+
+    def __str__(self):
+        return self.name
+
+    def __repr__(self):
+        m = '\n'.join([repr(m) for m in self.members])
+        m = m.replace('\n','\n     ')
+        return f'enum {m}'
+
+    def declareZ3Constructor(self, z3_types):
+        self.z3_types = z3_types
+        for alternate in self.members:
+            if alternate.type == None:
+                z3_types(self.name).declare(f'{self.name}::{alternate.name}')
+            elif isinstance(alternate.type, StructType):
+                arguments = [(id.name, z3_types(id.type))
+                                 for id in alternate.type.members]
+                z3_types(self.name).declare(f'{self.name}::{alternate.name}',*arguments)
+            elif isinstance(alternate.type, EnumType):
+                z3_types(self.name).declare(f'{self.name}::{alternate.name}',
+                                            ('value', z3_types(alternate.type.name)))
+            elif isinstance(alternate.type, str):
+                z3_types(self.name).declare(f'{self.name}::{alternate.name}',
+                                            ('value', z3_types(alternate.type)))
+            else:
+                raise Exception(
+                    f'unexpected enum type {alternate.type} for {alternate.name}')

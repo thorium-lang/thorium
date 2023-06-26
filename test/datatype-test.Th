@@ -1,0 +1,51 @@
+datatype simple_struct {
+    s1: int,
+    s2: int
+}
+
+datatype simple_enum {
+    e1
+  | e2
+}
+
+datatype alg_enum {
+    //e1 {s1: int, s2: int}
+    e1 {e11|e12}
+  | e2 {e21|e22}
+  | e3 {e31|e32}
+}
+
+reactor test(in1: cell alg_enum,in2: cell alg_enum, tick: stream unit) {
+    a : cell alg_enum = in1;
+    b : cell alg_enum = in2;
+properties:
+    invalid: G (a == b);
+    //invalid: (a == alg_enum::e1(alg_enum::e1::e11())) => G (a == b);
+}
+
+/*
+datatype alg_enum {
+    e1 : simple_struct
+  | e2
+}
+
+datatype meta_enum {
+    e1 { e11 | e12 }
+  | e2 { s1: int, s2 int }
+}
+
+reactor test () {
+    c1 : cell meta_enum = e1(e11);
+    c2 : cell alg_enum = e1(5, 10);
+}
+
+// making an alg_enum ?
+e1(simple_struct(5, 10))
+or perhaps
+e1(5, 10)
+
+// making a meta_enum
+e1(e11)
+e2(s1 = 5, s2 = 10)
+e2(5, 10)
+*/
