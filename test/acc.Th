@@ -1,5 +1,5 @@
 reactor acc(inc: stream unit) {
-  value: cell int = 0 .. value+increment;
+  value: cell int = 0 .. ~value + increment;
 private:
   increment: stream int = 1 @ inc;
 properties:

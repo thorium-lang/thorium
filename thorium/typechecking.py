@@ -143,6 +143,9 @@ class SubExprTypeCheck(ThoriumVisitor):
             return Stream(member_type)
         return member_type
 
+    def visitPrev(self, ctx:ThoriumParser.PrevContext):
+        return self.reactor.getType(ctx.ID().getText())
+
     def visitId(self, ctx: ThoriumParser.IdContext):
         ID = ctx.ID().getText()
         if ID in self.decls:

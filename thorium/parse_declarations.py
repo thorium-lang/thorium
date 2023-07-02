@@ -1,5 +1,6 @@
 from thorium import ThoriumVisitor, ThoriumParser
-from thorium.decls import Function, ReactorType, StructType, EnumType, TypedIdentifier
+from thorium.decls import Function, ReactorType, StructType, EnumType, \
+                          TypedIdentifier
 from thorium.reactivetypes import Cell, Stream
 from collections.abc import Iterable
 

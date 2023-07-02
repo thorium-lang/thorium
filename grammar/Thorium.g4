@@ -84,11 +84,12 @@ ltlProperty:
 //    ;
 
 expr:
-      expr DOT ID                # memberAccess
+      ID                         # id
+    | TILDE ID                   # prev
+    | expr DOT ID                # memberAccess
     | op=MINUS expr              # negative
     | UNIT                       # unit
     | (TRUE|FALSE)               # bool
-    | ID                         # id
     | NUMBER                     # number
     | STAR expr STAR             # changes
     | LPAREN expr RPAREN         # paren
@@ -117,6 +118,7 @@ EQUALS     : '=' ;
 COLON      : ':' ;
 SEMI       : ';' ;
 COMMA      : ',' ;
+TILDE      : '~' ;
 DOT        : '.' ;
 DOTS       : '..' ;
 PLUS       : '+' ;

@@ -23,13 +23,13 @@ class PropertyDefiner(ReactorDefiner):
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
         for k in self.all_states():
-            self.Assert(result.setValue(k, z3.Not(arg.isTrue(k))))
+            self.Assert(result[k]==z3.Not(arg.isTrue(k)))
         self.visitChildren(ctx)
 
     def visitNot(self, ctx: ThoriumParser.NotContext):
         result, arg = self.getRVs(ctx, ctx.expr())
         for k in self.all_states():
-            self.Assert(result.setValue(k, z3.Not(arg.isTrue(k))))
+            self.Assert(result[k]==z3.Not(arg.isTrue(k)))
         self.visitChildren(ctx)
 
     def visitLtlAnd(self, ctx: ThoriumParser.LtlAndContext):
@@ -115,7 +115,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def implication(self, result: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         for k in self.all_states():
-            self.Assert(result.setValue(k, z3.Or(q.isTrue(k), z3.Not(p.isTrue(k)))))
+            self.Assert(result[k]==z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
             #TODO: this should have worked, but the typechecking needs improvement
             #      for stream arguments.
             #self.Assert(result(k) == z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
