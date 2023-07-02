@@ -22,7 +22,7 @@ class SnapshotTrigger(ReactorDefiner):
         result = self[self.expr_name(ctx)]
         for k in range(self.first_state, self.final_state+1):
             self.Assert(z3.If(arg.isNothing(k),
-                              result.setValue(k, True),
+                              result[k] == True,
                               result.isNothing(k)))
         self.visitChildren(ctx)
 
@@ -33,7 +33,7 @@ class SnapshotTrigger(ReactorDefiner):
         for k in range(self.first_state, self.final_state+1):
             self.Assert(z3.If(z3.Or(arg0.isNothing(k), arg1.isNothing(k)),
                               result.isNothing(k),
-                              result.setValue(k, True)))
+                              result[k]==True))
 
         self.visitChildren(ctx)
 
@@ -44,6 +44,6 @@ class SnapshotTrigger(ReactorDefiner):
         for k in range(self.first_state, self.final_state+1):
             self.Assert(z3.If(z3.And(arg0.isNothing(k), arg1.isNothing(k)),
                               result.isNothing(k),
-                              result.setValue(k, True)))
+                              result[k]==True))
 
         self.visitChildren(ctx)

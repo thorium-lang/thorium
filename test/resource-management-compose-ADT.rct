@@ -33,9 +33,10 @@ private:
     workerB: cell AbstractWorker = Worker(1, input);
     workerC: cell AbstractWorker = Worker(2, input);
 
-    available_worker: stream A = workerA @ Request(input) unless workerA.busy
-                               | workerB @ Request(input) unless workerB.busy
-                               | workerC @ Request(input) unless workerC.busy;
+    requests: stream Command::Request = input when input matches Command::Request;
+    assigned_worker: stream Worker = workerA @ requests unless workerA.busy
+                                   | workerB @ requests unless workerB.busy
+                                   | workerC @ requests unless workerC.busy;
 
     assigned_worker_id: stream int = workerA.assigned | workerB.assigned | workerC.assigned;
     released_worker_id: stream int = workerA.released | workerB.released | workerC.released;

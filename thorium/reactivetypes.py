@@ -49,22 +49,20 @@ class ReactiveValue:
 
     def isTrue(self, k):
         if self.isStream():
-            return z3.If(self.isNothing(k), False, self.getValue(k))
+            return z3.If(self.isNothing(k), False, self[k])
         return self(k)
 
-    def setValue(self, k, value):
+    def __setitem__(self, k, value):
         if self.isStream():
             return self(k) == self.z3_type.event(value)
         return self(k) == value
 
-    def getValue(self, k, snapshot=False):
+    def __getitem__(self,k):
         # special case, 'unit' presence is treated as True
         if self.thorium_type == Stream('unit'):
             return z3.Not(self.isNothing(k))
         if self.isStream():
             return self.z3_type.value(self(k))
-        if snapshot:
-            return self(k-1)
         return self(k)
 
     #def __repr__(self):
