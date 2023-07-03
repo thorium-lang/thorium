@@ -1,17 +1,17 @@
-struct Command {
+datatype Command {
     worker_id: int,
     request: bool,
     query: bool,
     disconnect: bool
 }
 
-struct Response {
+datatype Response {
     worker_id: int,
     reply: bool,
     disconnect: bool
 }
 
-struct Worker {
+datatype Worker {
     id: int,
     busy: bool
 }
@@ -21,7 +21,7 @@ function simultaneous(a: bool, b: bool, c: bool) -> bool {
 }
 
 reactor manager(input: stream Command) {
-    resource_unavailable: stream unit = unit(request and not assigned_worker_id);
+    resource_unavailable: cell bool = active(request) and not active(assigned_worker_id);
     response: stream Response = responseA| responseB | responseC;
 private:
     request:    stream Command = input if input.request;
@@ -49,11 +49,21 @@ private:
     responseC: stream Response  = Response(workerC.id, true, false) @ query if query.worker_id == workerC.id and workerC.busy
                                 | Response(workerC.id, false, true) @ disconnect if disconnect.worker_id == workerC.id and workerB.busy;
 
-    count: cell int = 0 .. count + ( 1 @ assigned_worker_id
-                                   |-1 @ released_worker_id);
+    count: cell int = 0 .. ~count + ( 1 @ assigned_worker_id
+                                    |-1 @ released_worker_id);
+    req: stream bool = input.request;
+    que: stream bool = input.query;
+    dis: stream bool = input.disconnect;
+    //sim: stream bool =  simultaneous (input.request, input.query, input.disconnect);
+    sim: stream bool =  simultaneous (req, que, dis);
+    imp: cell bool =  resource_unavailable -> (count==3);
 properties:
-    diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G (resource_unavailable => (count==3));
-    orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
-                  G ((responseA.reply) => ((not responseA.disconnect) S (assigned_worker_id==workerA.id)));
+    //diligent: G not simultaneous (input.request, input.query, input.disconnect) =>
+    //              G (active(resource_unavailable) => (count==3));
+
+    diligent: G not sim => G imp;
+    //diligent: G not sim => G (5==4);
+
+    //orderly: G not simultaneous (input.request, input.query, input.disconnect) =>
+    //              G ((responseA.reply) => ((not responseA.disconnect) S (assigned_worker_id==workerA.id)));
 }

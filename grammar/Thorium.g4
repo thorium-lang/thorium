@@ -88,7 +88,7 @@ expr:
     | TILDE ID                   # prev
     | expr DOT ID                # memberAccess
     | op=MINUS expr              # negative
-    | UNIT                       # unit
+    | UNITCONST                  # unitConst
     | (TRUE|FALSE)               # bool
     | NUMBER                     # number
     | STAR expr STAR             # changes
@@ -161,11 +161,11 @@ fragment ALPHA    : [a-zA-Z_]    ;
 fragment ALPHANUM : [a-zA-Z_0-9] ;
 fragment NUM : [0-9] ;
 
-UNIT   : '()' ;
-TRUE   : 'true' ;
-FALSE  : 'false' ;
-ID : ALPHA (ALPHANUM|'::')* ;
-NUMBER : NUM+ ;
+UNITCONST : '()' ;
+TRUE      : 'true' ;
+FALSE     : 'false' ;
+ID        : ALPHA (ALPHANUM|'::')* ;
+NUMBER    : NUM+ ;
 
 COMMENT    : '/*' .*? '*/' -> skip ;
 LINE_COMMENT : '//' ~[\r\n]* -> skip ;

@@ -88,7 +88,7 @@ def main(_argv):
             else:
                 namegetter = thorium_reactor.getDeclaredMemberNames
                 getter = thorium_reactor.getDeclaredMemberValues
-            for k in range(args.N + 1):
+            for k in range(-1,args.N + 1):
                 trace.append(getter(solver.model().eval(z3_trace[k])))
 
             trace = [namegetter()] + trace
@@ -97,7 +97,7 @@ def main(_argv):
             print(r'\begin{centering}')
             print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
             print(r'\hline')
-            print(format_string % tuple(['k'] + list(range(len(column_widths) - 1))))
+            print(format_string % tuple(['k'] + list(range(-1,args.N + 1))))
             print(r'\hline')
             for row in [[t[i] for t in trace] for i in range(len(trace[0]))]:
                 print(format_string % tuple(row))

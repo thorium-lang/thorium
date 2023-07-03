@@ -1,7 +1,7 @@
 reactor acc(inc: stream unit) {
   value: cell int = 0 .. ~value + increment;
 private:
-  increment: stream int = 1 @ inc;
+  increment: stream int = (1 @ inc);
 properties:
   non_negative: G value >= 0;
   bounded: G (0 <= value and value <= 3);
