@@ -164,7 +164,7 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitNumber(self, ctx: ThoriumParser.NumberContext):
         return 'int'
 
-    def visitUnit(self, ctx: ThoriumParser.UnitContext):
+    def visitUnitConst(self, ctx: ThoriumParser.UnitConstContext):
         return 'unit'
 
     def visitBool(self, ctx: ThoriumParser.BoolContext):

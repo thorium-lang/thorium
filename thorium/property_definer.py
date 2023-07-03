@@ -68,7 +68,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def globally(self, result: ReactiveValue, arg: ReactiveValue):
         for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg.isTrue(k), result(k+1)))
+            self.Assert(result(k) == z3.And(arg.isTrue(k), result[k+1]))
         self.Assert(result.isTrue(self.kK+1))  # optimistic semantics
 
     def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
@@ -99,11 +99,11 @@ class PropertyDefiner(ReactorDefiner):
         self.visitChildren(ctx)
 
     def since(self, S: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
-        self.Assert(z3.Not(S(self.k0-1)))
+        S.setValue(self.k0-1, False)
         for k in self.all_states():
-            self.Assert(S(k) == z3.Or(q.isTrue(k),
-                                      z3.And(p.isTrue(k),
-                                             S(k-1))))
+            S.setValue(k, z3.Or(q.isTrue(k),
+                                z3.And(p.isTrue(k),
+                                S(k-1))))
 
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
@@ -115,10 +115,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def implication(self, result: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         for k in self.all_states():
-            self.Assert(result[k]==z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
-            #TODO: this should have worked, but the typechecking needs improvement
-            #      for stream arguments.
-            #self.Assert(result(k) == z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
+            result.setValue(k,z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
 
     def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())

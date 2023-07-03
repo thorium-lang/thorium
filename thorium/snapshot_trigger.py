@@ -27,23 +27,17 @@ class SnapshotTrigger(ReactorDefiner):
         self.visitChildren(ctx)
 
     def visitAnd(self, ctx: ThoriumParser.AndContext):
-        arg0 = self[self.expr_name(ctx.expr(0))]
-        arg1 = self[self.expr_name(ctx.expr(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(z3.Or(arg0.isNothing(k), arg1.isNothing(k)),
-                              result.isNothing(k),
-                              result[k]==True))
-
+        result, (arg0, arg1) = self.getRVs(ctx, ctx.expr())
+        for k in self.all_states():
+            result.condSet(k,
+                           z3.Not(z3.Or(arg0.isNothing(k), arg1.isNothing(k))),
+                           True)
         self.visitChildren(ctx)
 
     def visitOr(self, ctx: ThoriumParser.AndContext):
-        arg0 = self[self.expr_name(ctx.expr(0))]
-        arg1 = self[self.expr_name(ctx.expr(1))]
-        result = self[self.expr_name(ctx)]
-        for k in range(self.first_state, self.final_state+1):
-            self.Assert(z3.If(z3.And(arg0.isNothing(k), arg1.isNothing(k)),
-                              result.isNothing(k),
-                              result[k]==True))
-
+        result, (arg0, arg1) = self.getRVs(ctx, ctx.expr())
+        for k in self.streaming_states():
+            result.condSet(k,
+                           z3.Not(z3.And(arg0.isNothing(k), arg1.isNothing(k))),
+                           True)
         self.visitChildren(ctx)

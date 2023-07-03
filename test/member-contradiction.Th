@@ -1,0 +1,18 @@
+datatype Event {
+    a: bool,
+    b: bool,
+    c: bool
+}
+
+function simultaneous(a: bool, b: bool, c: bool) -> bool {
+    result == ((a and b) or (b and c) or (a and c));
+}
+
+reactor test(input: stream Event) {
+    A:   stream bool = input.a;
+    B:   stream bool = input.b;
+    C:   stream bool = input.c;
+    sim: stream bool = simultaneous (A, B, C);
+properties:
+    valid: G (active(input) -> active(sim));
+}
