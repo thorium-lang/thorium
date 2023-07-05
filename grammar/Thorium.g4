@@ -16,7 +16,7 @@ structMembers: structMember (COMMA structMember)* COMMA?;
 
 structMember: ID COLON (enum|struct|type) ;
 
-enumMembers: enumMember (PIPE enumMember)* ;
+enumMembers: enumMember PIPE enumMember (PIPE enumMember)* ;
 
 enumMember: ID (struct|enum| COLON type)? ;
 
@@ -83,10 +83,17 @@ ltlProperty:
 //    | expr
 //    ;
 
+matchArgs: LPAREN ID (COMMA ID)* RPAREN;
+matchCase: ID matchArgs? LTLIMPLIES expr;
+matchCases: LBRACE matchCase (PIPE matchCase)* RBRACE;
+
 expr:
       ID                         # id
     | TILDE ID                   # prev
     | expr DOT ID                # memberAccess
+    | expr MATCHES ID            # streamMatches
+    | MATCH expr matchCases      # match
+
     | op=MINUS expr              # negative
     | UNITCONST                  # unitConst
     | (TRUE|FALSE)               # bool
@@ -146,6 +153,8 @@ UNTIL      : 'U' ;
 SINCE      : 'S' ;
 IMPLIES    : '->' ;
 LTLIMPLIES : '=>' ;
+MATCH      : 'match';
+MATCHES    : 'matches';
 FORALL     : 'forall' ;
 EXISTS     : 'exists' ;
 CELL       : 'cell' ;

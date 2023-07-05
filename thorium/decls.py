@@ -242,13 +242,13 @@ class StructType:
         self.members_dict = {}
         self.z3_types = None
 
+    def getPublicMemberType(self, name):
+        return self.members_dict[name]
+
     def declareZ3Constructor(self, z3_types):
         self.z3_types = z3_types
         arguments = [(id.name, z3_types(id.type)) for id in self.members]
         z3_types(self.name).declare(f'{self.name}', *arguments)
-
-    def getPublicMemberType(self, name):
-        return self.members_dict[name]
 
     def finalize_datatypes(self):
         datatypes = [self]
@@ -298,6 +298,10 @@ class EnumType:
         self.members_dict = {}
         self.name = name
 
+    def getPublicMemberType(self, name):
+        print(f'enum {self.name}.{name} yields {self.members_dict[name]}')
+        return self.members_dict[name]
+
     def finalize_datatypes(self):
         datatypes = [self]
         for member in self.members:
@@ -317,21 +321,40 @@ class EnumType:
         m = m.replace('\n','\n     ')
         return f'enum {m}'
 
+    def constructorAccessors(self, member_name):
+        alternate_type = self.members_dict[member_name]
+        if alternate_type== None: return []
+        if isinstance(alternate_type, StructType):
+            return [m.name for m in alternate_type.members]
+        return ['value']
+
+    def constructorArguments(self, member_name):
+        alternate_type = self.members_dict[member_name]
+        if alternate_type== None: return []
+        if isinstance(alternate_type, StructType):
+            return [m.type for m in alternate_type.members]
+        return [alternate_type]
+
     def declareZ3Constructor(self, z3_types):
         self.z3_types = z3_types
         for alternate in self.members:
             if alternate.type == None:
                 z3_types(self.name).declare(f'{self.name}::{alternate.name}')
             elif isinstance(alternate.type, StructType):
-                arguments = [(id.name, z3_types(id.type))
+                arguments = [(f'{self.name}::{alternate.name}::{id.name}', z3_types(id.type))
                                  for id in alternate.type.members]
                 z3_types(self.name).declare(f'{self.name}::{alternate.name}',*arguments)
             elif isinstance(alternate.type, EnumType):
-                z3_types(self.name).declare(f'{self.name}::{alternate.name}',
-                                            ('value', z3_types(alternate.type.name)))
+                alt_name = f'{self.name}::{alternate.name}'
+                alt_value = f'{alt_name}::value'
+                z3_types(self.name).declare(alt_name,
+                                            (alt_value, z3_types(alternate.type.name)))
             elif isinstance(alternate.type, str):
-                z3_types(self.name).declare(f'{self.name}::{alternate.name}',
-                                            ('value', z3_types(alternate.type)))
+                alt_name = f'{self.name}::{alternate.name}'
+                alt_value = f'{alt_name}::value'
+                z3_types(self.name).declare(alt_name,
+                                            (alt_value, z3_types(alternate.type)))
             else:
                 raise Exception(
                     f'unexpected enum type {alternate.type} for {alternate.name}')
+        self.members_dict = {m.name: m.type for m in self.members}
