@@ -10,6 +10,23 @@ class Cell:
     def __str__(self):
         return f'cell-{self.type}'
 
+class Optional:
+    def __init__(self, type_):
+        if isinstance(type_, Stream) or isinstance(type_, Cell):
+            self.type = type_.type
+        else:
+            self.type = type_
+        self.name = self
+
+    def declareZ3Constructor(self, type_ctx):
+        type_ctx(self).declare('just', ('value', type_ctx(self.type)))
+        type_ctx(self).declare('nothing')
+
+    def __str__(self):
+        return f'optional-{self.type}'
+
+    def __eq__(self, other):
+        return isinstance(other, Optional) and (self.type == other.type)
 
 class Stream:
     def __init__(self, type_):
@@ -40,6 +57,10 @@ class ReactiveValue:
             self.nothing = self.z3_type.nothing
             self.event   = self.z3_type.event
             self.value   = self.z3_type.value
+        if self.isOptional():
+            self.nothing = self.z3_type.nothing
+            self.just    = self.z3_type.just
+            self.value   = self.z3_type.value
 
     def __call__(self, k):
         return self.accessor(self.trace[k])
@@ -47,24 +68,31 @@ class ReactiveValue:
     def isStream(self):
         return isinstance(self.thorium_type, Stream)
 
-    def condSet(self, k, cond, value, alternate = None):
+    def isOptional(self):
+        return isinstance(self.thorium_type, Optional)
+
+    def condSet(self, k, cond, value, alternate = None, debug=False):
         if alternate == None:
             alternate = self.nothing
-        self.solver.add(
-            self(k) == z3.If(cond, self.event(value), alternate))
+        assertion = self(k) == z3.If(cond, self.event(value), alternate)
+        if debug: print(assertion)
+        self.solver.add(assertion)
 
     def setNothing(self, k):
         self.solver.add(self.isNothing(k))
 
     def isNothing(self, k):
-        if self.isStream():
+        if self.isStream() or self.isOptional():
             return self(k) == self.z3_type.nothing
         return False
 
     def isActive(self, k):
-        if self.isStream():
+        if self.isStream() or self.isOptional():
             return self(k) != self.z3_type.nothing
         return True
+
+    def isPresent(self, k):
+        return self.isActive(k)
 
     def isTrue(self, k):
         if self.isStream():

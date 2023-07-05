@@ -1,4 +1,5 @@
 import z3
+from thorium.reactivetypes import Optional
 from thorium.reactivetypes import Stream
 from thorium.reactivetypes import Cell
 
@@ -21,8 +22,10 @@ class Z3Types:
     def addDatatype(self, datatype):
         self.datatypes.append(datatype)
         self.types[str(datatype)] = z3.Datatype(str(datatype))
-        if not isinstance(datatype, Stream):
-            self.addDatatype(Stream(datatype.name))
+        if not isinstance(datatype, Optional):
+            if not isinstance(datatype, Stream):
+                self.addDatatype(Stream(datatype.name))
+            self.addDatatype(Optional(datatype.name))
 
     def __call__(self, type_):
         if isinstance(type_, Cell):

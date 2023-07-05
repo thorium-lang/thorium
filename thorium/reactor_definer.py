@@ -20,6 +20,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.composite_types = composite_types
         self.functions = functions
         self.z3_types = z3_types
+        self.local_scope = {}
 
     def expr_name(self, ctx):
         return self.reactor_type.expr_name(ctx)
@@ -79,6 +80,76 @@ class ReactorDefiner(ThoriumVisitor):
             return composite_z3_type.__getattribute__(member_name)
         return composite.z3_type.__getattribute__(member_name)
 
+    def visitMatchCase(self, ctx:ThoriumParser.MatchCaseContext):
+        result,value = self.getRVs(ctx, ctx.expr())
+        instance = self.expr_for_match
+
+        spec = ctx.ID().getText()
+        spec_parts = spec.split('::')
+        base = '::'.join(spec_parts[:-1])
+        case = spec_parts[-1]
+        case_checker = self.z3_types(base).__getattribute__(f'is_{spec}')
+        argument_accessors = self.composite_types[base].constructorAccessors(case)
+        base_z3_type = self.z3_types(base)
+        if ctx.matchArgs():
+            for arg,accessor in zip(ctx.matchArgs().ID(),argument_accessors):
+                arg_member = f'{self.expr_name(ctx)}-{arg}'
+                accessor = base_z3_type.__getattribute__(f'{spec}::{accessor}')
+                self.local_scope[arg.getText()] = f'{self.expr_name(ctx)}-{arg}'
+                arg_member = self[arg_member]
+                for k in self.all_states():
+                    arg_member[k]=accessor(instance[k])
+
+        for k in self.streaming_states():
+            self.Assert(z3.If(
+                z3.And(instance.isActive(k),
+                       case_checker(instance[k])),
+                result(k) == result.just(value(k)),
+                result(k) == result.nothing), debug=False)
+        self.visitChildren(ctx)
+        self.local_scope = {}
+
+    def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
+        result,cases = self.getRVs(ctx,ctx.matchCase())
+        for case in cases:
+            for k in self.all_states():
+                self.Assert(z3.If(case.isPresent(k),
+                                  result(k) == case.value(case(k)),
+                                  True), debug=False)
+        self.visitChildren(ctx)
+
+
+    def visitMatch(self, ctx:ThoriumParser.MatchContext):
+        result,expr= self.getRVs(ctx, ctx.expr())
+        self.expr_for_match = expr
+        cases, = self.getRVs(ctx.matchCases())
+        if result.isStream():
+            result.setNothing(self.k0-1)
+            for k in self.streaming_states():
+                result.condSet(k,
+                               z3.And(expr.isActive(k),
+                                      cases.isActive(k)),
+                               cases[k])
+        else:
+            #TODO: handle this
+            pass
+        self.visitChildren(ctx)
+
+    def visitStreamMatches(self, ctx:ThoriumParser.StreamMatchesContext):
+        result,instance = self.getRVs(ctx, ctx.expr())
+        result.setNothing(self.k0-1)
+        type_name = ctx.ID().getText()
+        type_parts = type_name.split('::')
+        base_type = '::'.join(type_parts[:-1])
+        z3_type = self.z3_types(base_type)
+        case_checker = z3_type.__getattribute__(f'is_{type_name}')
+        for k in self.streaming_states():
+            result.condSet(k,
+                           z3.And(instance.isActive(k),
+                                  case_checker(instance[k])),
+                           instance[k], debug=True)
+        self.visit(ctx.expr())
+
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
         result = self[self.expr_name(ctx)]
         composite = self[self.expr_name(ctx.expr())]
@@ -129,6 +200,14 @@ class ReactorDefiner(ThoriumVisitor):
         self.visitChildren(ctx)
 
     def __getitem__(self, id: str):
+        if id in self.local_scope:
+            id = self.local_scope[id]
+            thorium_type = self.reactor_type.getType(id)
+            return ReactiveValue(self.solver,
+                                 self.trace,
+                                 self.z3_reactor_type.__getattribute__(id),
+                                 thorium_type,
+                                 self.z3_types(thorium_type))
         if self.reactor_type.hasMember(id):
             thorium_type = self.reactor_type.getType(id)
             return ReactiveValue(self.solver,

@@ -1,0 +1,27 @@
+//datatype D { dd : int, ddd : {dddd : int, ddddd: real} }
+//datatype D { dd : int, ddd : {dddd : int} }
+datatype D { dd : int }
+datatype I { a //: int
+           | b : int
+           | c { c1 : int , c2 : int }
+           | d : D
+           | e { e1 : int | e2 : int }
+           }
+reactor merge_match(i: stream I) {
+  value: cell int = 0 .. ~value + increment;
+private:
+  increment: stream int = match i { I::a => 1
+                                  | I::b(x) => 10
+                                  | I::c(x,y) => 100
+                                  | I::d(x) => x.dd // 1000
+                                  | I::e(x) => 10000}
+  //increment: stream int =   1 @ a_inc
+  //                      |  10 @ b_inc
+  //                      | 100 @ c_inc;
+  //a_inc: stream I = i matches I::a;
+  //b_inc: stream I = i matches I::b;
+  //c_inc: stream I = i matches I::c;
+
+properties:
+  untrue: G value != 11111;
+}

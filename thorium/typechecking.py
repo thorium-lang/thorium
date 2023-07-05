@@ -1,6 +1,6 @@
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.decls import Function
-from thorium.reactivetypes import Cell, Stream, base_type
+from thorium.reactivetypes import Cell, Stream, Optional, base_type
 
 
 def hasStreamType(types):
@@ -15,11 +15,13 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.decls = decls
         self.reactor = None
         self.debug = debug
+        self.local_scope = {}
 
     def expr_name(self, ctx):
         return self.reactor.expr_name(ctx)
 
     def set_expr_name(self, ctx, name):
+        #print(f'{name} {ctx.getText()}')
         self.reactor.set_expr_name(ctx, name)
 
     def visitSubExpr(self, ctx, sub=None):
@@ -132,6 +134,53 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.reactor.addSubExpr(ctx.expr(), type_)
         return type_
 
+    def visitMatchArgs(self, ctx:ThoriumParser.MatchArgsContext):
+        return [id.getText() for id in ctx.ID()]
+
+    def visitMatchCase(self, ctx:ThoriumParser.MatchCaseContext):
+        spec = ctx.ID().getText()
+        spec_parts = spec.split('::')
+        base = '::'.join(spec_parts[:-1])
+        case = spec_parts[-1]
+        if base in self.decls:
+            base_type = self.decls[base]
+            argument_types = base_type.constructorArguments(case)
+            case_type = self.decls[base].members_dict[case]
+            if ctx.matchArgs():
+                for arg,arg_ctx,type_ in zip(self.visit(ctx.matchArgs()),
+                                       ctx.matchArgs().ID(),
+                                       argument_types):
+                    self.set_expr_name(arg_ctx, f'{self.expr_name(ctx)}-{arg}')
+                    self.local_scope[arg] = f'{self.expr_name(ctx)}-{arg}'
+                    self.reactor.addSubExpr(arg_ctx, type_)
+        self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
+        type_ = self.visit(ctx.expr())
+        self.reactor.addSubExpr(ctx.expr(), type_)
+        self.local_scope = {}
+        return Optional(type_)
+
+    def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
+        types = self.visitSubExprs(ctx, ctx.matchCase())
+        # TODO: ensure that types match
+        return types[0].type
+
+    def visitMatch(self, ctx:ThoriumParser.MatchContext):
+        self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
+        self.set_expr_name(ctx.matchCases(), f'{self.expr_name(ctx)}-2')
+        expr_type = self.visit(ctx.expr())
+        self.reactor.addSubExpr(ctx.expr(), expr_type)
+        type_ = self.visit(ctx.matchCases())
+        self.reactor.addSubExpr(ctx.matchCases(), type_)
+        if isinstance(expr_type, Stream):
+            return Stream(type_)
+        return type_
+
+    def visitStreamMatches(self, ctx:ThoriumParser.StreamMatchesContext):
+        self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
+        type_ = self.visit(ctx.expr())
+        self.reactor.addSubExpr(ctx.expr(), type_)
+        return type_
+
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
         type_ = self.visit(ctx.expr())
@@ -153,6 +202,8 @@ class SubExprTypeCheck(ThoriumVisitor):
         # captures enum constructors; could this be handled more generally?
         if '::' in ID:
             return ID
+        if ID in self.local_scope:
+            return self.reactor.getType(self.local_scope[ID])
         return self.reactor.getType(ID)
 
     def visitChanges(self, ctx: ThoriumParser.ChangesContext):
