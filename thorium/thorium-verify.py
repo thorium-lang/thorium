@@ -6,7 +6,7 @@ import antlr4
 import z3
 from thorium import ThoriumLexer, ThoriumParser
 from thorium.decls import Function
-from thorium.reactor_definer import ReactorDefiner
+from thorium.reactor_definer import ReactorDefiner, TRACES
 from thorium.parse_declarations import ParseDeclarations
 from thorium.typechecking import SubExprTypeCheck
 from thorium.z3types import Z3Types
@@ -41,6 +41,32 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
+def format_trace(N, solver, thorium_reactor, heap, index, full_model=False):
+    z3_trace = solver.model()[heap][index]
+    #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
+    trace = []
+    if full_model:
+        namegetter = thorium_reactor.getMemberNames
+        getter = thorium_reactor.getMemberValues
+    else:
+        namegetter = thorium_reactor.getDeclaredMemberNames
+        getter = thorium_reactor.getDeclaredMemberValues
+    for k in range(-1,N + 1):
+        trace.append(getter(solver.model().eval(z3_trace[k])))
+
+    trace = [namegetter()] + trace
+    column_widths = [max([len(name) for name in column]) for column in trace]
+    format_string = ' & '.join(('%%%ds' % width) for width in column_widths) + r' \\'
+    print(r'\begin{centering}')
+    print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
+    print(r'\hline')
+    print(format_string % tuple(['k'] + list(range(-1,N + 1))))
+    print(r'\hline')
+    for row in [[t[i] for t in trace] for i in range(len(trace[0]))]:
+        print(format_string % tuple(row))
+    print(r'\hline')
+    print(r'\end{tabular}\\')
+    print(r'\end{centering}')
 
 def main(_argv):
     argparser = argparse.ArgumentParser(prog='thorium-verifier',
@@ -79,31 +105,9 @@ def main(_argv):
         print(f"Max memory: {solver.statistics().get_key_value('max memory')}")
 
         if verification_result == z3.sat:
-            z3_trace = solver.model()[reactor]
-            #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
-            trace = []
-            if args.full_model:
-                namegetter = thorium_reactor.getMemberNames
-                getter = thorium_reactor.getMemberValues
-            else:
-                namegetter = thorium_reactor.getDeclaredMemberNames
-                getter = thorium_reactor.getDeclaredMemberValues
-            for k in range(-1,args.N + 1):
-                trace.append(getter(solver.model().eval(z3_trace[k])))
-
-            trace = [namegetter()] + trace
-            column_widths = [max([len(name) for name in column]) for column in trace]
-            format_string = ' & '.join(('%%%ds' % width) for width in column_widths) + r' \\'
-            print(r'\begin{centering}')
-            print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
-            print(r'\hline')
-            print(format_string % tuple(['k'] + list(range(-1,args.N + 1))))
-            print(r'\hline')
-            for row in [[t[i] for t in trace] for i in range(len(trace[0]))]:
-                print(format_string % tuple(row))
-            print(r'\hline')
-            print(r'\end{tabular}\\')
-            print(r'\end{centering}')
+            print(f'looking up in TRACES: {TRACES}')
+            reactor_heap = TRACES[args.reactor].traces
+            format_trace(args.N, solver, thorium_reactor, reactor_heap, 0, args.full_model)
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')

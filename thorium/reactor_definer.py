@@ -7,6 +7,21 @@ from thorium.reactivetypes import ReactiveValue
 from thorium.reactivetypes import base_type
 from thorium.decls import StructType,ReactorType
 
+TRACES = {}
+
+
+class TraceHeap:
+    def __init__(self, typename, z3_reactor_type):
+        self.N = 0
+        self.traces = z3.Array(f'{typename}-heap',z3.IntSort(), z3.ArraySort(z3.IntSort(), z3_reactor_type))
+
+    def allocate_trace(self):
+        n = self.N
+        self.N += 1
+        return self.traces[n]
+
+    def __getitem__(self, n):
+        return self.traces[n]
 
 class ReactorDefiner(ThoriumVisitor):
     def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
@@ -21,6 +36,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.functions = functions
         self.z3_types = z3_types
         self.local_scope = {}
+        self.traces = {}
 
     def expr_name(self, ctx):
         return self.reactor_type.expr_name(ctx)
@@ -49,10 +65,24 @@ class ReactorDefiner(ThoriumVisitor):
             for k in self.all_states():
                 result.setValue(k, f(*[arg[k] for arg in args]))
 
+    def get_trace(self, index):
+        global TRACES
+        heap = TRACES[self.typename]
+        return heap[index]
+
+    def create_trace(self):
+        global TRACES
+        if self.typename not in TRACES:
+            TRACES[self.typename] = TraceHeap(self.typename, self.z3_reactor_type)
+        print(f'created trace, TRACES = {TRACES}')
+        return TRACES[self.typename].allocate_trace()
+
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
+        self.typename = typename
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
-        self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
+        #self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
+        self.trace = self.create_trace()
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state
