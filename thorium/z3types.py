@@ -20,14 +20,12 @@ class Z3Types:
         self.addDatatype(Stream('unit'))
 
     def addDatatype(self, datatype):
-        print(f'**************** adding datatype {datatype.name}')
         if str(datatype) in self.types: return
         self.datatypes.append(datatype)
         self.types[str(datatype)] = z3.Datatype(str(datatype))
         if not isinstance(datatype, Optional):
             if not isinstance(datatype, Stream):
                 self.addDatatype(Stream(datatype.name))
-            print(f'               Adding optional version of {datatype.name}')
             self.addDatatype(Optional(datatype.name))
 
     def __call__(self, type_):
@@ -45,8 +43,6 @@ class Z3Types:
             datatype.declareZ3Constructor(self)
         datatype_names = [str(dt) for dt in self.datatypes]
         datatype_names.sort()
-        for name in datatype_names:
-            print(f'************ {name}')
         args = [self(name) for name in datatype_names]
         datatypes = z3.CreateDatatypes(*args)
         self.types.update(

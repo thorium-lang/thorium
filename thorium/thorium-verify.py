@@ -45,7 +45,7 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(N, solver, thorium_reactor, heap, index, full_model=False):
+def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False):
     z3_trace = solver.model()[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
@@ -60,17 +60,31 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False):
 
     trace = [namegetter()] + trace
     column_widths = [max([len(name) for name in column]) for column in trace]
-    format_string = ' & '.join(('%%%ds' % width) for width in column_widths) + r' \\'
-    print(r'\begin{centering}')
-    print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
-    print(r'\hline')
-    print(format_string % tuple(['k'] + list(range(-1,N + 1))))
-    print(r'\hline')
+    glue = '   '
+    terminator = ''
+    if LaTeX:
+        glue = ' & '
+        terminator = r' \\'
+
+    format_string = glue.join(('%%%ds' % width) for width in column_widths) + terminator
+    if LaTeX:
+        print(r'\begin{centering}')
+        print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
+        print(r'\hline')
+    header = format_string % tuple(['k'] + list(range(-1,N + 1)))
+    print(header)
+    if LaTeX:
+        print(r'\hline')
+    else:
+        print('-'*len(header))
     for row in [[t[i] for t in trace] for i in range(len(trace[0]))]:
         print(format_string % tuple(row))
-    print(r'\hline')
-    print(r'\end{tabular}\\')
-    print(r'\end{centering}')
+    if LaTeX:
+        print(r'\hline')
+        print(r'\end{tabular}\\')
+        print(r'\end{centering}')
+    else:
+        print('-'*len(header))
 
 def main(_argv):
     argparser = argparse.ArgumentParser(prog='thorium-verifier',
@@ -109,7 +123,7 @@ def main(_argv):
         print(f"Max memory: {solver.statistics().get_key_value('max memory')}")
 
         if verification_result == z3.sat:
-            print(f'looking up in TRACES: {TRACES}')
+            #print(f'looking up in TRACES: {TRACES}')
             reactor_heap = TRACES[args.reactor].traces
             format_trace(args.N, solver, thorium_reactor, reactor_heap, 0, args.full_model)
             other_reactor = composite_types['Multiplier']

@@ -146,9 +146,9 @@ class ReactorType:
         arguments = []
         self.thorium_types = {t.name:t for t in self.thorium_types}
         for id in self.params + self.public_members + self.private_members + self.properties + self.subexprs:
-            print(f'param {id.name}: {self.getZ3Type(id.type,z3_types)}')
+            #print(f'param {id.name}: {self.getZ3Type(id.type,z3_types)}')
             arguments.append((id.name, self.getZ3Type(id.type,z3_types)))
-        print(f'Declaring constructor for {self.name} with {arguments}')
+        #print(f'Declaring constructor for {self.name} with {arguments}')
         z3_types(self.name).declare(f'{self.name}', *arguments)
 
     def setThoriumTypes(self, thorium_types):
@@ -156,16 +156,11 @@ class ReactorType:
 
     def getZ3Type(self, type_, z3_types):
         try:
-            print(f'================= looking up {type_} {type(type_)}')
             if str(type_) in self.thorium_types:
                 thorium_type = self.thorium_types[str(type_)]
-                print(f'   case 1: {thorium_type}')
             else:
                 thorium_type = self.thorium_types[str(type_.type)]
-            #print(f'thorium_type {type_}')
-            #print(f'thorium_type.type {type_.type}')
             if isinstance(thorium_type,ReactorType):
-                print(f'   is reactor')
                 if isinstance(type_,Stream):
                     return z3_types(Stream('int'))
                 if isinstance(type_,Optional):
@@ -173,7 +168,8 @@ class ReactorType:
                 else:
                     return z3_types(Cell('int'))
         except Exception as ex:
-            print(ex)
+            #print(ex)
+            pass
         return z3_types(type_)
 
     def show(self, z3_instance):
@@ -328,7 +324,6 @@ class EnumType:
         self.name = name
 
     def getPublicMemberType(self, name):
-        print(f'enum {self.name}.{name} yields {self.members_dict[name]}')
         return self.members_dict[name]
 
     def finalize_datatypes(self):
