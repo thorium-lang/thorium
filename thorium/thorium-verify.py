@@ -5,7 +5,7 @@ import antlr4
 
 import z3
 from thorium import ThoriumLexer, ThoriumParser
-from thorium.decls import Function
+from thorium.decls import Function, ReactorType
 from thorium.reactor_definer import ReactorDefiner, TRACES
 from thorium.parse_declarations import ParseDeclarations
 from thorium.typechecking import SubExprTypeCheck
@@ -32,6 +32,10 @@ def parse_thorium_file(filename, debug=False):
     for declaration in declarations:
         if isinstance(declaration, Function):
             functions.append(declaration)
+        elif isinstance(declaration, ReactorType):
+            z3_types.addDatatype(declaration)
+            composite_types.append(declaration)
+            declaration.setThoriumTypes(composite_types)
         else:
             z3_types.addDatatype(declaration)
             composite_types.append(declaration)
@@ -108,6 +112,11 @@ def main(_argv):
             print(f'looking up in TRACES: {TRACES}')
             reactor_heap = TRACES[args.reactor].traces
             format_trace(args.N, solver, thorium_reactor, reactor_heap, 0, args.full_model)
+            other_reactor = composite_types['Multiplier']
+            other_heap = TRACES['Multiplier'].traces
+            format_trace(args.N, solver, other_reactor, other_heap, 0, args.full_model)
+            format_trace(args.N, solver, other_reactor, other_heap, 1, args.full_model)
+
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')

@@ -54,10 +54,12 @@ class ReactiveValue:
         self.thorium_type = thorium_type
         self.z3_type = z3_type
         if self.isStream():
+            print(f'------------- stream z3_type {z3_type}')
             self.nothing = self.z3_type.nothing
             self.event   = self.z3_type.event
             self.value   = self.z3_type.value
         if self.isOptional():
+            print(f'------------- optional z3_type {z3_type}')
             self.nothing = self.z3_type.nothing
             self.just    = self.z3_type.just
             self.value   = self.z3_type.value
@@ -88,6 +90,11 @@ class ReactiveValue:
 
     def isActive(self, k):
         if self.isStream() or self.isOptional():
+            print(f'checking isactive for type {self.z3_type}')
+            print(f'checking isactive')
+            print(f'checking isactive {self.accessor}')
+            print(f'checking isactive {self.trace}')
+            print(f'checking isactive {self(k)}')
             return self(k) != self.z3_type.nothing
         return True
 

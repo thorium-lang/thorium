@@ -1,0 +1,16 @@
+reactor Multiplier( c: cell int, in : stream int) {
+    out: stream int = c * in;
+}
+
+datatype Setter {
+    Stage1: int
+  | Stage2: int
+}
+
+reactor Pipeline(setter: stream Setter, in: stream int) {
+    stage1: cell Multiplier = Multiplier(1, in) .. match setter {Setter::Stage1(c) => Multiplier(c, in)};
+    stage2: cell Multiplier = Multiplier(1, stage1.out) .. match setter {Setter::Stage2(c) => Multiplier(c, in)};
+    out: stream int = stage2.out;
+properties:
+    bounded: not F ( (in==1) and (out/in > 10) );
+}

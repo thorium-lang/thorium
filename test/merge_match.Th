@@ -13,7 +13,7 @@ private:
   increment: stream int = match i { I::a => 1
                                   | I::b(x) => 10
                                   | I::c(x,y) => 100
-                                  | I::d(x) => x.dd // 1000
+                                  | I::d(x) => 1000
                                   | I::e(x) => 10000}
   //increment: stream int =   1 @ a_inc
   //                      |  10 @ b_inc

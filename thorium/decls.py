@@ -2,7 +2,8 @@ from __future__ import annotations
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.operators import Operators
 import z3
-from typing import List, Union, Optional
+from typing import List, Union
+from thorium.reactivetypes import Stream, Cell, Optional
 
 
 class TypedIdentifier:
@@ -141,11 +142,39 @@ class ReactorType:
     def set_expr_name(self, ctx, name):
         self.expr_names[ctx] = name
 
-    def declareZ3Constructor(self, type_ctx):
+    def declareZ3Constructor(self, z3_types):
         arguments = []
+        self.thorium_types = {t.name:t for t in self.thorium_types}
         for id in self.params + self.public_members + self.private_members + self.properties + self.subexprs:
-            arguments.append((id.name, type_ctx(id.type)))
-        type_ctx(self.name).declare(f'{self.name}', *arguments)
+            print(f'param {id.name}: {self.getZ3Type(id.type,z3_types)}')
+            arguments.append((id.name, self.getZ3Type(id.type,z3_types)))
+        print(f'Declaring constructor for {self.name} with {arguments}')
+        z3_types(self.name).declare(f'{self.name}', *arguments)
+
+    def setThoriumTypes(self, thorium_types):
+        self.thorium_types = thorium_types
+
+    def getZ3Type(self, type_, z3_types):
+        try:
+            print(f'================= looking up {type_} {type(type_)}')
+            if str(type_) in self.thorium_types:
+                thorium_type = self.thorium_types[str(type_)]
+                print(f'   case 1: {thorium_type}')
+            else:
+                thorium_type = self.thorium_types[str(type_.type)]
+            #print(f'thorium_type {type_}')
+            #print(f'thorium_type.type {type_.type}')
+            if isinstance(thorium_type,ReactorType):
+                print(f'   is reactor')
+                if isinstance(type_,Stream):
+                    return z3_types(Stream('int'))
+                if isinstance(type_,Optional):
+                    return z3_types(Optional('int'))
+                else:
+                    return z3_types(Cell('int'))
+        except Exception as ex:
+            print(ex)
+        return z3_types(type_)
 
     def show(self, z3_instance):
         for i, id in enumerate(self.getDeclaredMemberNames()):

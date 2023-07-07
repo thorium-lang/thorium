@@ -124,6 +124,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         else:
             result_type = f.name
             #TODO: handle reactors properly, the type should be Array[f.name]
+        if ctx.ID().getText()=="Multiplier": return result_type
         if hasStreamType(types):
             return Stream(result_type)
         return result_type
