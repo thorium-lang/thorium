@@ -45,7 +45,7 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False):
+def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=True):
     z3_trace = solver.model()[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
