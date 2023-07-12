@@ -8,16 +8,15 @@ datatype CFG {
 }
 
 reactor Pipeline(setter: stream CFG, in: stream int) {
-    stage1: cell Mult = Mult(1, in) .. match setter { CFG::S1(c) => Mult(3, in)
+    stage1: cell Mult = Mult(1, in) .. match setter { CFG::S1(c) => Mult(c, in)
                                                     | CFG::S2(c) => ~stage1 };
-    stage2: cell Mult = Mult(1, stage1.out) .. match setter { CFG::S2(c) => Mult(4, stage1.out)
+    stage2: cell Mult = Mult(1, stage1.out) .. match setter { CFG::S2(c) => Mult(c, stage1.out)
                                                             | CFG::S1(c) => ~stage2 };
-    //out: stream int = stage1.out;
     out: stream int = stage2.out;
 
-//    C: stream int = match setter {CFG::S1(c) => c
-//                                 |CFG::S2(c) => c};
+    C: cell int = 0 .. match setter {CFG::S1(c) => c
+                                    |CFG::S2(c) => c};
 properties:
-    //bounded: (G C<10) => not F ( (in==1) and (out/in > 10) );
-    bounded: not F ( (in==1) and (out/in > 10) );
+    bounded: (G (0<=C and C<10)) => not F ( (in==1) and (out/in > 10) );
+    //bounded: not F ( (in==1) and (out/in > 10) );
 }

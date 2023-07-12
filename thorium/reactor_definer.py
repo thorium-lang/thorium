@@ -134,12 +134,14 @@ class ReactorDefiner(ThoriumVisitor):
                     arg_member[k]=accessor(instance[k])
 
         for k in self.streaming_states():
+            print(self.reactor_type.getType(self.reactor_type.expr_name(ctx)))
             print(result(k))
+            print(self.reactor_type.getType(self.reactor_type.expr_name(ctx.expr())))
             print(value(k))
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
                        case_checker(instance[k])),
-                result(k) == result.just(value(k)),
+                result(k) == result.just(value[k]),
                 result(k) == result.nothing), debug=False)
         self.visitChildren(ctx)
         self.local_scope = {}
