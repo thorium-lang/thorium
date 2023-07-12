@@ -134,25 +134,25 @@ class ReactorDefiner(ThoriumVisitor):
                     arg_member[k]=accessor(instance[k])
 
         for k in self.streaming_states():
-            print(self.reactor_type.getType(self.reactor_type.expr_name(ctx)))
-            print(result(k))
-            print(self.reactor_type.getType(self.reactor_type.expr_name(ctx.expr())))
-            print(value(k))
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
                        case_checker(instance[k])),
-                result(k) == result.just(value[k]),
+                result._setValue(k,value[k]),
                 result(k) == result.nothing), debug=False)
         self.visitChildren(ctx)
         self.local_scope = {}
 
     def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
         result,cases = self.getRVs(ctx,ctx.matchCase())
-        for case in cases:
-            for k in self.all_states():
-                self.Assert(z3.If(case.isPresent(k),
-                                  result(k) == case.value(case(k)),
-                                  True), debug=False)
+        cases = list(cases)
+        cases.reverse()
+        for k in self.all_states():
+            assertion = result.isNothing(k)
+            for case in cases:
+                assertion = z3.If(case.isActive(k),
+                                  result(k) == case(k),
+                                  assertion)
+            self.Assert(assertion, debug=False)
         self.visitChildren(ctx)
 
 
@@ -163,11 +163,11 @@ class ReactorDefiner(ThoriumVisitor):
         if result.isStream():
             result.setNothing(self.k0-1)
             for k in self.streaming_states():
-                result.condSet(k,
-                               z3.And(expr.isActive(k),
-                                      cases.isActive(k)),
-                               cases[k])
+                self.Assert(z3.If( z3.And(expr.isActive(k), cases.isActive(k)),
+                                   result(k) == cases(k),
+                                   result.isNothing(k)), debug=False)
         else:
+            print("********************************* ERROR: Shouldn't get here")
             #TODO: handle this
             pass
         self.visitChildren(ctx)
@@ -184,7 +184,7 @@ class ReactorDefiner(ThoriumVisitor):
             result.condSet(k,
                            z3.And(instance.isActive(k),
                                   case_checker(instance[k])),
-                           instance[k], debug=True)
+                           instance[k], debug=False)
         self.visit(ctx.expr())
 
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
@@ -336,20 +336,20 @@ class ReactorDefiner(ThoriumVisitor):
         instancename = f'{name}-{reactortype.name}-{start_state}'
         definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
         result[start_state]=definer.trace_ID
-        print(f'\n\nConstructing {name} at time {start_state}\n')
+        #print(f'\n\nConstructing {name} at time {start_state}\n')
         for param,arg in zip([definer[name] for name in reactortype.getParamNames()],args):
             #print(f'param: {param(0)} arg: {arg(0)}')
-            print(f'param is stream {param.isStream()} arg is stream {arg.isStream()}')
+            #print(f'param is stream {param.isStream()} arg is stream {arg.isStream()}')
             if arg.isStream() and not param.isStream():
                 for k in range(start_state, self.final_state+1):
-                    self.Assert(param(k)==arg[start_state],debug=True)
+                    self.Assert(param(k)==arg[start_state],debug=False)
             else:
                 for k in range(start_state, self.final_state+1):
-                    self.Assert(param(k)==arg(k),debug=True)
+                    self.Assert(param(k)==arg(k),debug=False)
             if param.isStream():
                 self.Assert(param.isNothing(self.k0-1))
             else:
-                self.Assert(param(start_state-1)==param(start_state),debug=True)
+                self.Assert(param(start_state-1)==param(start_state),debug=False)
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]

@@ -21,7 +21,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         return self.reactor.expr_name(ctx)
 
     def set_expr_name(self, ctx, name):
-        print(f'{name} {ctx.getText()}')
+        #print(f'{name} {ctx.getText()}')
         self.reactor.set_expr_name(ctx, name)
 
     def visitSubExpr(self, ctx, sub=None):
@@ -123,7 +123,6 @@ class SubExprTypeCheck(ThoriumVisitor):
             result_type = f.result_type
         else:
             result_type = f.name
-        if ctx.ID().getText()=="Mult": return result_type
         if hasStreamType(types):
             return Stream(result_type)
         return result_type
@@ -159,12 +158,13 @@ class SubExprTypeCheck(ThoriumVisitor):
         type_ = self.visit(ctx.expr())
         self.reactor.addSubExpr(ctx.expr(), type_)
         self.local_scope = {}
-        return Optional(type_)
+        #return Optional(type_)
+        return Stream(type_)
 
     def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
         types = self.visitSubExprs(ctx, ctx.matchCase())
         # TODO: ensure that types match
-        return types[0].type
+        return Stream(types[0].type)
 
     def visitMatch(self, ctx:ThoriumParser.MatchContext):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
@@ -176,7 +176,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.reactor.addSubExpr(ctx.matchCases(), type_)
         if isinstance(expr_type, Stream):
             return Stream(type_)
-        return type_
+        return Stream(type_)
 
     def visitStreamMatches(self, ctx:ThoriumParser.StreamMatchesContext):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
