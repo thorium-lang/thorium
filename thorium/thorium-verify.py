@@ -45,7 +45,7 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=True):
+def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False):
     z3_trace = solver.model()[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
@@ -55,12 +55,12 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
     else:
         namegetter = thorium_reactor.getDeclaredMemberNames
         getter = thorium_reactor.getDeclaredMemberValues
-    for k in range(-1,N + 1):
+    for k in range(-1,N):
         trace.append(getter(solver.model().eval(z3_trace[k])))
 
     trace = [namegetter()] + trace
-    column_widths = [max([len(name) for name in column]) for column in trace]
-    glue = '   '
+    column_widths = [max(2,max([len(name) for name in column])) for column in trace]
+    glue = '  '
     terminator = ''
     if LaTeX:
         glue = ' & '
@@ -71,7 +71,7 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
         print(r'\begin{centering}')
         print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
         print(r'\hline')
-    header = format_string % tuple(['k'] + list(range(-1,N + 1)))
+    header = format_string % tuple(['k'] + list(range(-1,N)))
     print(header)
     if LaTeX:
         print(r'\hline')
@@ -104,11 +104,8 @@ def main(_argv):
     reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
     solver = z3.Solver()
     if args.reactor:
-        reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N, solver)
+        reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N-1, solver)
         reactor_type = z3_types(args.reactor)
-        thorium_reactor = composite_types[args.reactor]
-
-        # print(repr(thorium_reactor))
 
         property_ = reactor_type.__getattribute__(args.property)
 
@@ -123,14 +120,18 @@ def main(_argv):
         print(f"Max memory: {solver.statistics().get_key_value('max memory')}")
 
         if verification_result == z3.sat:
-            #print(f'looking up in TRACES: {TRACES}')
-            reactor_heap = TRACES[args.reactor].traces
-            format_trace(args.N, solver, thorium_reactor, reactor_heap, 0, args.full_model)
-            other_reactor = composite_types['Multiplier']
-            other_heap = TRACES['Multiplier'].traces
-            format_trace(args.N, solver, other_reactor, other_heap, 0, args.full_model)
-            format_trace(args.N, solver, other_reactor, other_heap, 1, args.full_model)
+            reactor_types = [heap.typename for heap in TRACES.values()]
+            reactor_types.remove(args.reactor)
+            reactor_types.sort()
+            reactor_types = [args.reactor] + reactor_types
 
+            for reactor_type in reactor_types:
+                reactor_heap = TRACES[reactor_type]
+                reactor_traces = reactor_heap.traces
+                thorium_reactor = composite_types[reactor_type]
+                for n in range(reactor_heap.N):
+                    print(f'{reactor_type}-{n}')
+                    format_trace(args.N, solver, thorium_reactor, reactor_traces, n, args.full_model)
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')

@@ -13,6 +13,7 @@ TRACES = {}
 class TraceHeap:
     def __init__(self, typename, z3_reactor_type):
         self.N = 0
+        self.typename = typename
         self.traces = z3.Array(f'{typename}-heap',z3.IntSort(), z3.ArraySort(z3.IntSort(), z3_reactor_type))
 
     def allocate_trace(self):
@@ -81,7 +82,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
         #self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
-        self.trace_index,self.trace = self.create_trace()
+        self.trace_ID, self.trace = self.create_trace()
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state
@@ -133,6 +134,8 @@ class ReactorDefiner(ThoriumVisitor):
                     arg_member[k]=accessor(instance[k])
 
         for k in self.streaming_states():
+            print(result(k))
+            print(value(k))
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
                        case_checker(instance[k])),
@@ -330,16 +333,21 @@ class ReactorDefiner(ThoriumVisitor):
         definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types)
         instancename = f'{name}-{reactortype.name}-{start_state}'
         definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
-        #for k in self.all_states():
-        #    result[k]=definer.trace_index
-        result[start_state]=definer.trace_index
+        result[start_state]=definer.trace_ID
+        print(f'\n\nConstructing {name} at time {start_state}\n')
         for param,arg in zip([definer[name] for name in reactortype.getParamNames()],args):
-            if param.isStream() and arg.isStream():
+            #print(f'param: {param(0)} arg: {arg(0)}')
+            print(f'param is stream {param.isStream()} arg is stream {arg.isStream()}')
+            if arg.isStream() and not param.isStream():
                 for k in range(start_state, self.final_state+1):
-                    self.Assert(param(k)==arg(start_state))
+                    self.Assert(param(k)==arg[start_state],debug=True)
             else:
                 for k in range(start_state, self.final_state+1):
-                    self.Assert(param(k)==arg(k))
+                    self.Assert(param(k)==arg(k),debug=True)
+            if param.isStream():
+                self.Assert(param.isNothing(self.k0-1))
+            else:
+                self.Assert(param(start_state-1)==param(start_state),debug=True)
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]
@@ -359,7 +367,8 @@ class ReactorDefiner(ThoriumVisitor):
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):
-                self.constructReactor(self.expr_name(ctx), callable, args, result, 0)
+                for k in range(self.k0, self.kK+1):
+                    self.constructReactor(self.expr_name(ctx), callable, args, result, k)
             else:
                 self.apply(callable, args, result)
             self.visitChildren(ctx)

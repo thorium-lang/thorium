@@ -78,7 +78,8 @@ class ReactiveValue:
         if debug: print(assertion)
         self.solver.add(assertion)
 
-    def setNothing(self, k):
+    def setNothing(self, k, debug=False):
+        if debug: print(self.isNothing(k))
         self.solver.add(self.isNothing(k))
 
     def isNothing(self, k):
@@ -104,10 +105,12 @@ class ReactiveValue:
             return self(k) == self.z3_type.event(value)
         return self(k) == value
 
-    def set(self, k, value):
+    def set(self, k, value, debug=False):
+        if debug: print(self(k) == value)
         self.solver.add(self(k) == value)
 
-    def setValue(self, k, value):
+    def setValue(self, k, value, debug=False):
+        if debug: print(self._setValue(k, value))
         self.solver.add(self._setValue(k, value))
 
     def value_is_nothing(self, value):
@@ -118,8 +121,10 @@ class ReactiveValue:
 
     def __setitem__(self, k, value):
         if self.isStream() and not self.value_is_nothing(value):
+            #print(self(k) == self.z3_type.event(value))
             self.solver.add(self(k) == self.z3_type.event(value))
         else:
+            #print(self(k) == value)
             self.solver.add(self(k) == value)
 
     def __getitem__(self,k):

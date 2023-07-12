@@ -21,7 +21,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         return self.reactor.expr_name(ctx)
 
     def set_expr_name(self, ctx, name):
-        #print(f'{name} {ctx.getText()}')
+        print(f'{name} {ctx.getText()}')
         self.reactor.set_expr_name(ctx, name)
 
     def visitSubExpr(self, ctx, sub=None):
@@ -123,8 +123,7 @@ class SubExprTypeCheck(ThoriumVisitor):
             result_type = f.result_type
         else:
             result_type = f.name
-            #TODO: handle reactors properly, the type should be Array[f.name]
-        if ctx.ID().getText()=="Multiplier": return result_type
+        if ctx.ID().getText()=="Mult": return result_type
         if hasStreamType(types):
             return Stream(result_type)
         return result_type
@@ -153,6 +152,8 @@ class SubExprTypeCheck(ThoriumVisitor):
                                        argument_types):
                     self.set_expr_name(arg_ctx, f'{self.expr_name(ctx)}-{arg}')
                     self.local_scope[arg] = f'{self.expr_name(ctx)}-{arg}'
+                    if isinstance(self.expr_type_for_match, Stream):
+                        type_ = Stream(type_)
                     self.reactor.addSubExpr(arg_ctx, type_)
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
         type_ = self.visit(ctx.expr())
@@ -169,6 +170,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
         self.set_expr_name(ctx.matchCases(), f'{self.expr_name(ctx)}-2')
         expr_type = self.visit(ctx.expr())
+        self.expr_type_for_match = expr_type
         self.reactor.addSubExpr(ctx.expr(), expr_type)
         type_ = self.visit(ctx.matchCases())
         self.reactor.addSubExpr(ctx.matchCases(), type_)
