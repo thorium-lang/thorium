@@ -20,6 +20,7 @@ class Z3Types:
         self.addDatatype(Stream('unit'))
 
     def addDatatype(self, datatype):
+        if str(datatype) in self.types: return
         self.datatypes.append(datatype)
         self.types[str(datatype)] = z3.Datatype(str(datatype))
         if not isinstance(datatype, Optional):
@@ -41,6 +42,7 @@ class Z3Types:
         for datatype in self.datatypes:
             datatype.declareZ3Constructor(self)
         datatype_names = [str(dt) for dt in self.datatypes]
+        datatype_names.sort()
         args = [self(name) for name in datatype_names]
         datatypes = z3.CreateDatatypes(*args)
         self.types.update(

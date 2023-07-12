@@ -1,5 +1,5 @@
 reactor accumulator(s1: stream int) {
     sum: cell int = 0..update;
 private:
-    update: stream int = sum+s1;
+    update: stream int = ~sum + s1;
 }

@@ -26,3 +26,5 @@ Cargo.lock
 
 data
 gen
+
+*venv*

@@ -5,8 +5,24 @@ from typing import List
 import z3
 from thorium.reactivetypes import ReactiveValue
 from thorium.reactivetypes import base_type
-from thorium.decls import StructType,ReactorType
+from thorium.decls import StructType, ReactorType
 
+TRACES = {}
+
+
+class TraceHeap:
+    def __init__(self, typename, z3_reactor_type):
+        self.N = 0
+        self.typename = typename
+        self.traces = z3.Array(f'{typename}-heap',z3.IntSort(), z3.ArraySort(z3.IntSort(), z3_reactor_type))
+
+    def allocate_trace(self):
+        n = self.N
+        self.N += 1
+        return n,self.traces[n]
+
+    def __getitem__(self, n):
+        return self.traces[n]
 
 class ReactorDefiner(ThoriumVisitor):
     def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
@@ -21,6 +37,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.functions = functions
         self.z3_types = z3_types
         self.local_scope = {}
+        self.traces = {}
 
     def expr_name(self, ctx):
         return self.reactor_type.expr_name(ctx)
@@ -49,10 +66,23 @@ class ReactorDefiner(ThoriumVisitor):
             for k in self.all_states():
                 result.setValue(k, f(*[arg[k] for arg in args]))
 
+    def get_trace(self, index):
+        global TRACES
+        heap = TRACES[self.typename]
+        return heap[index]
+
+    def create_trace(self):
+        global TRACES
+        if self.typename not in TRACES:
+            TRACES[self.typename] = TraceHeap(self.typename, self.z3_reactor_type)
+        return TRACES[self.typename].allocate_trace()
+
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
+        self.typename = typename
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
-        self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
+        #self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
+        self.trace_ID, self.trace = self.create_trace()
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state
@@ -78,7 +108,10 @@ class ReactorDefiner(ThoriumVisitor):
         composite_z3_type = self.z3_types(composite_type)
         if composite.isStream():
             return composite_z3_type.__getattribute__(member_name)
-        return composite.z3_type.__getattribute__(member_name)
+        if composite.isOptional():
+            return composite_z3_type.__getattribute__(member_name)
+        return composite_z3_type.__getattribute__(member_name)
+        #return composite.z3_type.__getattribute__(member_name)
 
     def visitMatchCase(self, ctx:ThoriumParser.MatchCaseContext):
         result,value = self.getRVs(ctx, ctx.expr())
@@ -104,18 +137,22 @@ class ReactorDefiner(ThoriumVisitor):
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
                        case_checker(instance[k])),
-                result(k) == result.just(value(k)),
+                result._setValue(k,value[k]),
                 result(k) == result.nothing), debug=False)
         self.visitChildren(ctx)
         self.local_scope = {}
 
     def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
         result,cases = self.getRVs(ctx,ctx.matchCase())
-        for case in cases:
-            for k in self.all_states():
-                self.Assert(z3.If(case.isPresent(k),
-                                  result(k) == case.value(case(k)),
-                                  True), debug=False)
+        cases = list(cases)
+        cases.reverse()
+        for k in self.all_states():
+            assertion = result.isNothing(k)
+            for case in cases:
+                assertion = z3.If(case.isActive(k),
+                                  result(k) == case(k),
+                                  assertion)
+            self.Assert(assertion, debug=False)
         self.visitChildren(ctx)
 
 
@@ -126,11 +163,11 @@ class ReactorDefiner(ThoriumVisitor):
         if result.isStream():
             result.setNothing(self.k0-1)
             for k in self.streaming_states():
-                result.condSet(k,
-                               z3.And(expr.isActive(k),
-                                      cases.isActive(k)),
-                               cases[k])
+                self.Assert(z3.If( z3.And(expr.isActive(k), cases.isActive(k)),
+                                   result(k) == cases(k),
+                                   result.isNothing(k)), debug=False)
         else:
+            print("********************************* ERROR: Shouldn't get here")
             #TODO: handle this
             pass
         self.visitChildren(ctx)
@@ -147,22 +184,32 @@ class ReactorDefiner(ThoriumVisitor):
             result.condSet(k,
                            z3.And(instance.isActive(k),
                                   case_checker(instance[k])),
-                           instance[k], debug=True)
+                           instance[k], debug=False)
         self.visit(ctx.expr())
 
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
+        global TRACES
         result = self[self.expr_name(ctx)]
         composite = self[self.expr_name(ctx.expr())]
         member_name = ctx.ID().getText()
         accessor = self.getMemberAccessor(composite, member_name)
-        if composite.isStream():
-            result.setNothing(self.k0-1)
-            for k in self.streaming_states():
-                result.condSet(k, composite.isActive(k),
-                               accessor(composite[k]))
+        if isinstance(self.composite_types[str(composite.thorium_type.type)],ReactorType):
+            traces = TRACES[str(composite.thorium_type.type)]
+            if composite.isStream():
+                result.setNothing(self.k0-1)
+                for k in self.streaming_states():
+                    result.condSet(k, composite.isActive(k), accessor(traces[composite[k]][k]))
+            else:
+                for k in self.all_states():
+                    result.set(k, accessor(traces[composite[k]][k]))
         else:
-            for k in self.all_states():
-                result.set(k, accessor(composite[k]))
+            if composite.isStream():
+                result.setNothing(self.k0-1)
+                for k in self.streaming_states():
+                    result.condSet(k, composite.isActive(k), accessor(composite[k]))
+            else:
+                for k in self.all_states():
+                    result.set(k, accessor(composite[k]))
         self.visit(ctx.expr())
 
     def visitPrev(self, ctx:ThoriumParser.PrevContext):
@@ -207,14 +254,14 @@ class ReactorDefiner(ThoriumVisitor):
                                  self.trace,
                                  self.z3_reactor_type.__getattribute__(id),
                                  thorium_type,
-                                 self.z3_types(thorium_type))
+                                 self.getZ3Type(thorium_type))
         if self.reactor_type.hasMember(id):
             thorium_type = self.reactor_type.getType(id)
             return ReactiveValue(self.solver,
                                  self.trace,
                                  self.z3_reactor_type.__getattribute__(id),
                                  thorium_type,
-                                 self.z3_types(thorium_type))
+                                 self.getZ3Type(thorium_type))
         elif id in self.functions:
             f = self.functions[id]
             f.setSolver(self.solver)
@@ -225,6 +272,43 @@ class ReactorDefiner(ThoriumVisitor):
                 return f
             if isinstance(f, ReactorType):
                 return f
+
+    def getThoriumType(self, thorium_type):
+        from reactivetypes import Stream, Cell, Optional
+        parts = thorium_type.split('-')
+        if parts[-1] in self.composite_types:
+            composite_type = self.composite_types[parts[-1]]
+            if parts[0]=='stream':
+                return Stream(composite_type)
+            if parts[0]=='cell':
+                return Cell(composite_type)
+            if parts[0]=='optional':
+                return Optional(composite_type)
+            return composite_type
+        return thorium_type
+
+    def getZ3Type(self, thorium_type):
+        from thorium.reactivetypes import Stream, Cell, Optional
+        if isinstance(thorium_type,str):
+            thorium_type = self.getThoriumType(thorium_type)
+        if isinstance(thorium_type, Stream):
+            if isinstance(thorium_type.type, str):
+                thorium_type.type = self.getThoriumType(thorium_type.type)
+            if isinstance(thorium_type.type, ReactorType):
+                return self.z3_types('stream-int')
+        if isinstance(thorium_type, Cell):
+            if isinstance(thorium_type.type, str):
+                thorium_type.type = self.getThoriumType(thorium_type.type)
+            if isinstance(thorium_type.type, ReactorType):
+                return self.z3_types('int')
+        if isinstance(thorium_type, Optional):
+            if isinstance(thorium_type.type, str):
+                thorium_type.type = self.getThoriumType(thorium_type.type)
+            if isinstance(thorium_type.type, ReactorType):
+                return self.z3_types('optional-int')
+        if isinstance(thorium_type, ReactorType):
+            return self.z3_types('int')
+        return self.z3_types(thorium_type)
 
     def unit(self,args,result):
         for k in self.streaming_states():
@@ -250,12 +334,22 @@ class ReactorDefiner(ThoriumVisitor):
                          start_state: int):
         definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types)
         instancename = f'{name}-{reactortype.name}-{start_state}'
-        trace = definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
-        for k in range(start_state, self.final_state+1):
-            self.Assert(result[k]==trace[k])
+        definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
+        result[start_state]=definer.trace_ID
+        #print(f'\n\nConstructing {name} at time {start_state}\n')
         for param,arg in zip([definer[name] for name in reactortype.getParamNames()],args):
-            for k in range(start_state, self.final_state+1):
-                self.Assert(param(k)==arg(k))
+            #print(f'param: {param(0)} arg: {arg(0)}')
+            #print(f'param is stream {param.isStream()} arg is stream {arg.isStream()}')
+            if arg.isStream() and not param.isStream():
+                for k in range(start_state, self.final_state+1):
+                    self.Assert(param(k)==arg[start_state],debug=False)
+            else:
+                for k in range(start_state, self.final_state+1):
+                    self.Assert(param(k)==arg(k),debug=False)
+            if param.isStream():
+                self.Assert(param.isNothing(self.k0-1))
+            else:
+                self.Assert(param(start_state-1)==param(start_state),debug=False)
 
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]
@@ -275,7 +369,11 @@ class ReactorDefiner(ThoriumVisitor):
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):
-                self.constructReactor(self.expr_name(ctx), callable, args, result, 0)
+                if self.hold_init:
+                    self.constructReactor(self.expr_name(ctx), callable, args, result, self.k0)
+                else:
+                    for k in range(self.k0, self.kK+1):
+                        self.constructReactor(self.expr_name(ctx), callable, args, result, k)
             else:
                 self.apply(callable, args, result)
             self.visitChildren(ctx)
@@ -393,4 +491,8 @@ class ReactorDefiner(ThoriumVisitor):
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())
         self.hold(result, init, update)
-        self.visitChildren(ctx)
+        init,update = ctx.expr()
+        self.hold_init = True
+        self.visit(init)
+        self.hold_init = False
+        self.visit(update)

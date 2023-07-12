@@ -2,7 +2,8 @@ from __future__ import annotations
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.operators import Operators
 import z3
-from typing import List, Union, Optional
+from typing import List, Union
+from thorium.reactivetypes import Stream, Cell, Optional, base_type
 
 
 class TypedIdentifier:
@@ -141,11 +142,35 @@ class ReactorType:
     def set_expr_name(self, ctx, name):
         self.expr_names[ctx] = name
 
-    def declareZ3Constructor(self, type_ctx):
+    def declareZ3Constructor(self, z3_types):
         arguments = []
+        self.thorium_types = {t.name:t for t in self.thorium_types}
         for id in self.params + self.public_members + self.private_members + self.properties + self.subexprs:
-            arguments.append((id.name, type_ctx(id.type)))
-        type_ctx(self.name).declare(f'{self.name}', *arguments)
+            #print(f'param {id.name}: {self.getZ3Type(id.type,z3_types)}')
+            arguments.append((id.name, self.getZ3Type(id.type,z3_types)))
+        #print(f'Declaring constructor for {self.name} with {arguments}')
+        z3_types(self.name).declare(f'{self.name}', *arguments)
+
+    def setThoriumTypes(self, thorium_types):
+        self.thorium_types = thorium_types
+
+    def getZ3Type(self, type_, z3_types):
+        try:
+            if str(type_) in self.thorium_types:
+                thorium_type = self.thorium_types[str(type_)]
+            else:
+                thorium_type = self.thorium_types[str(type_.type)]
+            if isinstance(thorium_type,ReactorType):
+                if isinstance(type_,Stream):
+                    return z3_types(Stream('int'))
+                if isinstance(type_,Optional):
+                    return z3_types(Optional('int'))
+                else:
+                    return z3_types(Cell('int'))
+        except Exception as ex:
+            #print(ex)
+            pass
+        return z3_types(type_)
 
     def show(self, z3_instance):
         for i, id in enumerate(self.getDeclaredMemberNames()):
@@ -170,8 +195,21 @@ class ReactorType:
             return s.replace('nothing', '')
             # return s.replace('nothing', '[]')
 
-        return [pretty(f'{z3_instance.arg(i)}') for i in
-                range(len(self.getDeclaredMemberNames()))]
+        result = []
+        for i,name in enumerate(self.getMemberNames()):
+            type_ = self.all_members[name]
+            try:
+                type_ = self.thorium_types[f'{base_type(type_)}']
+                if isinstance(type_, ReactorType):
+                    result.append(f'{type_.name}-{z3_instance.arg(i)}')
+                else:
+                    result.append(pretty(f'{z3_instance.arg(i)}'))
+            except Exception as ex:
+                result.append(pretty(f'{z3_instance.arg(i)}'))
+        return result
+
+        #return [pretty(f'{z3_instance.arg(i)}') for i in
+                #range(len(self.getDeclaredMemberNames()))]
 
     def getMemberValues(self, z3_instance):
         def pretty(s: str):
@@ -299,7 +337,6 @@ class EnumType:
         self.name = name
 
     def getPublicMemberType(self, name):
-        print(f'enum {self.name}.{name} yields {self.members_dict[name]}')
         return self.members_dict[name]
 
     def finalize_datatypes(self):
