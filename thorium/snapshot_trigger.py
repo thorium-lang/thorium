@@ -16,6 +16,7 @@ class SnapshotTrigger(ReactorDefiner):
         self.composite_types = parent.composite_types
         self.functions = parent.functions
         self.z3_types = parent.z3_types
+        self.local_scope = {}
 
     def visitNot(self, ctx: ThoriumParser.NotContext):
         arg = self[self.expr_name(ctx.expr())]

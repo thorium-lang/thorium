@@ -3,7 +3,7 @@ from thorium import ThoriumVisitor, ThoriumParser
 from thorium.operators import Operators
 import z3
 from typing import List, Union
-from thorium.reactivetypes import Stream, Cell, Optional
+from thorium.reactivetypes import Stream, Cell, Optional, base_type
 
 
 class TypedIdentifier:
@@ -195,8 +195,21 @@ class ReactorType:
             return s.replace('nothing', '')
             # return s.replace('nothing', '[]')
 
-        return [pretty(f'{z3_instance.arg(i)}') for i in
-                range(len(self.getDeclaredMemberNames()))]
+        result = []
+        for i,name in enumerate(self.getMemberNames()):
+            type_ = self.all_members[name]
+            try:
+                type_ = self.thorium_types[f'{base_type(type_)}']
+                if isinstance(type_, ReactorType):
+                    result.append(f'{type_.name}-{z3_instance.arg(i)}')
+                else:
+                    result.append(pretty(f'{z3_instance.arg(i)}'))
+            except Exception as ex:
+                result.append(pretty(f'{z3_instance.arg(i)}'))
+        return result
+
+        #return [pretty(f'{z3_instance.arg(i)}') for i in
+                #range(len(self.getDeclaredMemberNames()))]
 
     def getMemberValues(self, z3_instance):
         def pretty(s: str):

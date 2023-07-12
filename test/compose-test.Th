@@ -1,21 +1,21 @@
-reactor Mult( c: cell int, in : stream int) {
+reactor Multiplier( c: cell int, in : stream int) {
     out: stream int = c * in;
 }
 
 datatype CFG {
-    S1: int
+    S1{coef : int}
   | S2: int
 }
 
 reactor Pipeline(setter: stream CFG, in: stream int) {
-    stage1: cell Mult = Mult(1, in) ..
-                        match setter { CFG::S1(c) => Mult(c, in) };
-    stage2: cell Mult = Mult(1, stage1.out) ..
-                        match setter { CFG::S2(c) => Mult(c, stage1.out) };
+    stage1: cell Multiplier = Multiplier(1, in)         .. match setter { CFG::S1(c) => Multiplier(c, in) };
+    stage2: cell Multiplier = Multiplier(1, stage1.out) .. match setter { CFG::S2(c) => Multiplier(c, stage1.out) };
     out: stream int = stage2.out;
 private:
     C: cell int = 0 .. match setter {CFG::S1(c) => c
                                     |CFG::S2(c) => c};
 properties:
-    bounded: (G (0<=C and C<10)) => not F ( (in>0) and (out/in > 10) );
+    //bounded: G (C <= ~C);
+    bounded: inactive(setter) and (G (0<=C and C<10)) => not F ( (in==1) and (out/in > 10) );
+    //bounded: (G (0<=C and C<10)) => not F ( (in>0) and (out/in > 10) );
 }

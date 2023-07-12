@@ -369,8 +369,11 @@ class ReactorDefiner(ThoriumVisitor):
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):
-                for k in range(self.k0, self.kK+1):
-                    self.constructReactor(self.expr_name(ctx), callable, args, result, k)
+                if self.hold_init:
+                    self.constructReactor(self.expr_name(ctx), callable, args, result, self.k0)
+                else:
+                    for k in range(self.k0, self.kK+1):
+                        self.constructReactor(self.expr_name(ctx), callable, args, result, k)
             else:
                 self.apply(callable, args, result)
             self.visitChildren(ctx)
@@ -488,4 +491,8 @@ class ReactorDefiner(ThoriumVisitor):
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())
         self.hold(result, init, update)
-        self.visitChildren(ctx)
+        init,update = ctx.expr()
+        self.hold_init = True
+        self.visit(init)
+        self.hold_init = False
+        self.visit(update)

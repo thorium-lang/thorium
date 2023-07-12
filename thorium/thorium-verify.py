@@ -11,6 +11,7 @@ from thorium.parse_declarations import ParseDeclarations
 from thorium.typechecking import SubExprTypeCheck
 from thorium.z3types import Z3Types
 from typing import List
+import time
 
 
 def named_lookup(named_items: List):
@@ -55,7 +56,7 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
     else:
         namegetter = thorium_reactor.getDeclaredMemberNames
         getter = thorium_reactor.getDeclaredMemberValues
-    for k in range(-1,N):
+    for k in range(N):
         trace.append(getter(solver.model().eval(z3_trace[k])))
 
     trace = [namegetter()] + trace
@@ -71,7 +72,7 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
         print(r'\begin{centering}')
         print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
         print(r'\hline')
-    header = format_string % tuple(['k'] + list(range(-1,N)))
+    header = format_string % tuple(['k'] + list(range(N)))
     print(header)
     if LaTeX:
         print(r'\hline')
@@ -102,6 +103,7 @@ def main(_argv):
     composite_types, functions, z3_types = parse_thorium_file(args.filename, debug=args.debug)
 
     reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
+    z3.set_param("smt.random_seed", int(time.time()))
     solver = z3.Solver()
     if args.reactor:
         reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N-1, solver)
