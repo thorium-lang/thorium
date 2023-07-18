@@ -1,22 +1,23 @@
-reactor Multiplier( c: cell int, in : stream int) {
-    out: stream int = c * in;
-}
-
 datatype CFG {
-    S1{coef : int}
+    S1: int
   | S2: int
+  | S3: int
 }
 
-reactor Pipeline(setter: stream CFG, in: stream int) {
-    coef1: cell int = 1 .. match setter { CFG::S1(c) => c };
-    coef2: cell int = 1 .. match setter { CFG::S2(c) => c };
-    out: stream int = coef1 * coef2 * in;
+reactor Pipeline(cfg: stream CFG, in: stream int) {
+    coef1: cell int = 1 .. match cfg { CFG::S1(c) => c };
+    coef2: cell int = 1 .. match cfg { CFG::S2(c) => c };
+    coef3: cell int = 1 .. match cfg { CFG::S3(c) => c };
+ // out: stream int = coef1 * coef2 * coef3 * in;
+    out: stream int = out3;
 private:
     out1: stream int = coef1*in;
     out2: stream int = coef2*out1;
-    out:  stream int = out2;
-    C: cell int = 0 .. match setter {CFG::S1(c) => c
-                                    |CFG::S2(c) => c};
+    out3: stream int = coef3*out2;
+    C: cell int = 0 .. match cfg {CFG::S1(c) => c
+                                 |CFG::S2(c) => c
+                                 |CFG::S3(c) => c
+                                 };
 properties:
-    bounded: inactive(setter) and (G (0<=C and C<10)) => not F ( (in==1) and (out/in > 10) );
+    bounded: (G (0<=C and C<10)) => not F ( (in==1) and (out/in > 100) );
 }
