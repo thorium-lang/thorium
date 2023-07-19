@@ -46,7 +46,7 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False):
+def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False, label=''):
     z3_trace = solver.model()[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
@@ -70,8 +70,11 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
     format_string = glue.join(('%%%ds' % width) for width in column_widths) + terminator
     if LaTeX:
         print(r'\begin{centering}')
+        if label: print(f'\\textbf{{{label}}}\\\\')
         print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
         print(r'\hline')
+    elif label:
+        print(f'\n{label}\n')
     header = format_string % tuple(['k'] + list(range(N)))
     print(header)
     if LaTeX:
@@ -97,6 +100,7 @@ def main(_argv):
     argparser.add_argument('-n', '--num-states', dest='N', type=int, required=False)
     argparser.add_argument('-f', '--full-model', dest='full_model', action='store_true', default=False)
     argparser.add_argument('-d', '--debug', dest='debug', action='store_true', default=False)
+    argparser.add_argument('-x', '--LaTeX', dest='latex', action='store_true', default=False)
 
     args = argparser.parse_args()
 
@@ -132,8 +136,7 @@ def main(_argv):
                 reactor_traces = reactor_heap.traces
                 thorium_reactor = composite_types[reactor_type]
                 for n in range(reactor_heap.N):
-                    print(f'{reactor_type}-{n}')
-                    format_trace(args.N, solver, thorium_reactor, reactor_traces, n, args.full_model)
+                    format_trace(args.N, solver, thorium_reactor, reactor_traces, n, args.full_model, LaTeX=args.latex, label=f'{reactor_type}-{n}')
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')

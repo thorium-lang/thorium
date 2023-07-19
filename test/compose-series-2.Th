@@ -1,0 +1,15 @@
+reactor Mult( c: cell int, in : stream int) {
+    out: stream int = c * in;
+}
+
+reactor Pipeline(cfg: stream int, in: stream int) {
+    s1: cell Mult = Mult(1, in)     .. Mult(cfg, in) @ cfg if stage==1;
+    s2: cell Mult = Mult(1, s1.out) .. Mult(cfg, s1.out) @ cfg if stage==2;
+    out: stream int = s2.out;
+private:
+    stage: cell int = 0 .. ~stage + 1 @ cfg;
+    C: cell int = 0 .. cfg;
+properties:
+    bounded: (G (0<=C and C<10)) => not F ( (in==1) and
+                                            (out/in > 10) );
+}
