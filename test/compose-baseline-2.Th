@@ -1,0 +1,18 @@
+datatype CFG {
+    S1: int
+  | S2: int
+  | S3: int
+}
+
+reactor Pipeline(cfg: stream CFG, in: stream int) {
+    coef1: cell int = 1 .. match cfg { CFG::S1(c) => c };
+    coef2: cell int = 1 .. match cfg { CFG::S2(c) => c };
+    out: stream int = coef1 * coef2 * in;
+private:
+    C: cell int = 0 .. match cfg {CFG::S1(c) => c
+                                 |CFG::S2(c) => c
+                                 |CFG::S3(c) => c
+                                 };
+properties:
+    bounded: (G (0<=C and C<10)) => not F ( (in==1) and (out/in > 10) );
+}
