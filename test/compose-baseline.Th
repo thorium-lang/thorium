@@ -8,7 +8,6 @@ reactor Pipeline(cfg: stream CFG, in: stream int) {
     coef1: cell int = 1 .. match cfg { CFG::S1(c) => c };
     coef2: cell int = 1 .. match cfg { CFG::S2(c) => c };
     coef3: cell int = 1 .. match cfg { CFG::S3(c) => c };
- // out: stream int = coef1 * coef2 * coef3 * in;
     out: stream int = out3;
 private:
     out1: stream int = coef1*in;

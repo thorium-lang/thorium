@@ -100,11 +100,11 @@ class PropertyDefiner(ReactorDefiner):
         self.visitChildren(ctx)
 
     def since(self, S: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
-        S.setValue(self.k0-1, False)
+        self.Assert(S.setValue(self.k0 - 1, False))
         for k in self.all_states():
-            S.setValue(k, z3.Or(q.isTrue(k),
-                                z3.And(p.isTrue(k),
-                                S(k-1))))
+            self.Assert(S.setValue(k, z3.Or(q.isTrue(k),
+                                            z3.And(p.isTrue(k),
+                                S(k-1)))))
 
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
@@ -116,7 +116,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def implication(self, result: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         for k in self.all_states():
-            result.setValue(k,z3.Or(q.isTrue(k), z3.Not(p.isTrue(k))))
+            self.Assert(result.setValue(k, z3.Or(q.isTrue(k), z3.Not(p.isTrue(k)))))
 
     def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())

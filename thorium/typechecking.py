@@ -1,6 +1,6 @@
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.decls import Function
-from thorium.reactivetypes import Cell, Stream, Optional, base_type
+from thorium.reactivetypes import Cell, Stream, base_type
 
 
 def hasStreamType(types):
@@ -158,7 +158,6 @@ class SubExprTypeCheck(ThoriumVisitor):
         type_ = self.visit(ctx.expr())
         self.reactor.addSubExpr(ctx.expr(), type_)
         self.local_scope = {}
-        #return Optional(type_)
         return Stream(type_)
 
     def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):

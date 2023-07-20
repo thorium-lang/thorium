@@ -21,6 +21,7 @@ def flatten(iterable):
 def lflatten(iterable):
     return list(flatten(iterable))
 
+
 class _namespace:
     def __init__(self):
         self.namespaces = []
@@ -35,6 +36,7 @@ class _namespace:
     def __call__(self):
         return '::'.join(self.namespaces)
 
+
 class _namespace_scope:
     def __init__(self, namespace, name):
         self.namespace = namespace
@@ -46,6 +48,7 @@ class _namespace_scope:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.namespace.pop()
+
 
 class ParseDeclarations(ThoriumVisitor):
     def __init__(self,debug=False):

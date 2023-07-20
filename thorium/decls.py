@@ -3,7 +3,7 @@ from thorium import ThoriumVisitor, ThoriumParser
 from thorium.operators import Operators
 import z3
 from typing import List, Union
-from thorium.reactivetypes import Stream, Cell, Optional, base_type
+from thorium.reactivetypes import Stream, Cell, base_type
 
 
 class TypedIdentifier:
@@ -146,9 +146,7 @@ class ReactorType:
         arguments = []
         self.thorium_types = {t.name:t for t in self.thorium_types}
         for id in self.params + self.public_members + self.private_members + self.properties + self.subexprs:
-            #print(f'param {id.name}: {self.getZ3Type(id.type,z3_types)}')
             arguments.append((id.name, self.getZ3Type(id.type,z3_types)))
-        #print(f'Declaring constructor for {self.name} with {arguments}')
         z3_types(self.name).declare(f'{self.name}', *arguments)
 
     def setThoriumTypes(self, thorium_types):
@@ -163,8 +161,6 @@ class ReactorType:
             if isinstance(thorium_type,ReactorType):
                 if isinstance(type_,Stream):
                     return z3_types(Stream('int'))
-                if isinstance(type_,Optional):
-                    return z3_types(Optional('int'))
                 else:
                     return z3_types(Cell('int'))
         except Exception as ex:

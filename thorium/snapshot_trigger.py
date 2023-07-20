@@ -30,15 +30,17 @@ class SnapshotTrigger(ReactorDefiner):
     def visitAnd(self, ctx: ThoriumParser.AndContext):
         result, (arg0, arg1) = self.getRVs(ctx, ctx.expr())
         for k in self.all_states():
-            result.condSet(k,
-                           z3.Not(z3.Or(arg0.isNothing(k), arg1.isNothing(k))),
-                           True)
+            self.Assert(z3.If(
+                z3.Not(z3.Or(arg0.isNothing(k), arg1.isNothing(k))),
+                result.setValue(k, True),
+                result.isNothing(k)))
         self.visitChildren(ctx)
 
     def visitOr(self, ctx: ThoriumParser.AndContext):
         result, (arg0, arg1) = self.getRVs(ctx, ctx.expr())
         for k in self.streaming_states():
-            result.condSet(k,
-                           z3.Not(z3.And(arg0.isNothing(k), arg1.isNothing(k))),
-                           True)
+            self.Assert(z3.If(
+                z3.Not(z3.And(arg0.isNothing(k), arg1.isNothing(k))),
+                result.setValue(k, True),
+                result.isNothing(k)))
         self.visitChildren(ctx)
