@@ -14,8 +14,11 @@ class TypedIdentifier:
     def __repr__(self):
         return f'{self.name} : {self.type}'
 
+class DeclType:
+    def setDeclarations(self,declarations):
+        self.declarations = declarations
 
-class Function(ThoriumVisitor):
+class Function(ThoriumVisitor, DeclType):
     def __init__(self, ctx: ThoriumParser.FunctionContext):
         self.solver = None
         self.name = None
@@ -109,7 +112,7 @@ class Function(ThoriumVisitor):
         return self.binOp(ctx)
 
 
-class ReactorType:
+class ReactorType(DeclType):
     def __init__(self, ctx: ThoriumParser.ReactorContext,
                  name: str,
                  params: List[TypedIdentifier],
@@ -266,7 +269,7 @@ class ReactorType:
 '''
 
 
-class StructType:
+class StructType(DeclType):
     def __init__(self, ctx: ThoriumParser.StructContext,
                  name: str,
                  members: List[TypedIdentifier]):
@@ -322,7 +325,7 @@ class EnumMember:
         return self.name
 
 
-class EnumType:
+class EnumType(DeclType):
     def __init__(self,
                  ctx: ThoriumParser.EnumContext,
                  name: str,
@@ -333,7 +336,8 @@ class EnumType:
         self.name = name
 
     def getPublicMemberType(self, name):
-        return self.members_dict[name]
+        return self.declarations[self.members[0].type].getPublicMemberType(name)
+        #return self.members_dict[name]
 
     def finalize_datatypes(self):
         datatypes = [self]
@@ -354,19 +358,22 @@ class EnumType:
         m = m.replace('\n','\n     ')
         return f'enum {m}'
 
-    def constructorAccessors(self, member_name):
-        alternate_type = self.members_dict[member_name]
+    def constructorAccessors(self, alternate_name):
+        alternate_type = self.members_dict[alternate_name]
         if alternate_type== None: return []
         if isinstance(alternate_type, StructType):
             return [m.name for m in alternate_type.members]
         return ['value']
 
-    def constructorArguments(self, member_name):
-        alternate_type = self.members_dict[member_name]
+    def constructorArguments(self, alternate_name):
+        alternate_type = self.members_dict[alternate_name]
         if alternate_type== None: return []
         if isinstance(alternate_type, StructType):
             return [m.type for m in alternate_type.members]
         return [alternate_type]
+
+    def constructor(self, alternate_name):
+        return self.z3_types(self.name).__getattribute__(f'{self.name}::{alternate_name}')
 
     def declareZ3Constructor(self, z3_types):
         self.z3_types = z3_types

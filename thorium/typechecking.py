@@ -111,6 +111,15 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.set_expr_name(ctx.expr(), self.expr_name(ctx))
         return self.visit(ctx.expr())
 
+    def getDeclType(self, name):
+        if name in self.decls:
+            return self.decls[name]
+        if '::' in name:
+            prefix = '::'.join(name.split('::')[:-1])
+            if prefix in self.decls:
+                return self.decls[prefix]
+        raise Exception(f'{name} does not identify a type')
+
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         types = self.visitSubExprs(ctx)
         if ctx.ID().getText() in ['active','inactive']:
@@ -118,7 +127,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         if ctx.ID().getText() == 'unit':
             return Stream('unit')
 
-        f = self.decls[ctx.ID().getText()]
+        f = self.getDeclType(ctx.ID().getText())
         if isinstance(f, Function):
             result_type = f.result_type
         else:

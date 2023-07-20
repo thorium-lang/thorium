@@ -1,0 +1,36 @@
+reactor Mult( c: cell int, in : stream int) {
+    out: stream int = c * in;
+}
+
+reactor Div( c: cell int, in : stream int) {
+    out: stream int = c / in;
+}
+
+datatype CFG {
+    mul: int
+  | div: int
+}
+
+datatype Op {
+    mul: Mult
+  | div: Div
+}
+
+datatype DT {
+    a: int
+ |  b: int
+}
+
+reactor Pipeline(cfg: stream CFG, in: stream int) {
+    //s1: cell Op = Op::mul(Mult(1, in)) .. Op::mul(Mult(1, in)) @ cfg;
+    s1: cell DT = DT::a(1) .. match cfg {CFG::mul(m) => DT::a(m)
+                                        |CFG::div(d) => DT::b(d)};
+    out: cell int = match s1 { DT::a(v) => v
+                             | DT::b(v) => v};
+private:
+    C: cell int = 1 .. match cfg { CFG::mul(c) => c
+                                 | CFG::div(c) => c
+                                 };
+properties:
+    bounded: (G (C>0)) => not F ( out < in );
+}

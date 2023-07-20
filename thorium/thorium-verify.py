@@ -26,6 +26,9 @@ def parse_thorium_file(filename, debug=False):
     tree = parser.prog()
 
     declarations = ParseDeclarations(debug).visitProg(tree)
+    declarations_lookup = named_lookup(declarations)
+    for declaration in declarations:
+        declaration.setDeclarations(declarations_lookup)
     SubExprTypeCheck(named_lookup(declarations), debug).visitProg(tree)
     z3_types = Z3Types(debug)
     composite_types = []

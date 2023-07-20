@@ -168,8 +168,9 @@ class ReactorDefiner(ThoriumVisitor):
                                    result(k) == cases(k),
                                    result.isNothing(k)), debug=False)
         else:
-            print("********************************* ERROR: Shouldn't get here")
-            #TODO: handle this
+            for k in self.all_states():
+                self.Assert(z3.Implies( cases.isActive(k),
+                                   result[k] == cases[k]))
             pass
         self.visitChildren(ctx)
 
@@ -276,6 +277,10 @@ class ReactorDefiner(ThoriumVisitor):
                 return f
             if isinstance(f, ReactorType):
                 return f
+        prefix = '::'.join(id.split('::')[:-1])
+        if prefix in self.composite_types:
+            enum = self.composite_types[prefix]
+            return enum.constructor(id.split('::')[-1])
 
     def getThoriumType(self, thorium_type):
         from reactivetypes import Stream, Cell
