@@ -15,14 +15,19 @@ class TraceHeap:
         self.N = 0
         self.typename = typename
         self.traces = z3.Array(f'{typename}-heap',z3.IntSort(), z3.ArraySort(z3.IntSort(), z3_reactor_type))
+        self.first_state_for_trace = []
 
-    def allocate_trace(self):
+    def allocate_trace(self, first_state):
+        self.first_state_for_trace.append(first_state)
         n = self.N
         self.N += 1
         return n,self.traces[n]
 
     def __getitem__(self, n):
         return self.traces[n]
+
+    def getFirstStateForTrace(self, n):
+        return self.first_state_for_trace[n]
 
 class ReactorDefiner(ThoriumVisitor):
     def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
@@ -75,18 +80,18 @@ class ReactorDefiner(ThoriumVisitor):
         heap = TRACES[self.typename]
         return heap[index]
 
-    def create_trace(self):
+    def create_trace(self, first_state):
         global TRACES
         if self.typename not in TRACES:
             TRACES[self.typename] = TraceHeap(self.typename, self.z3_reactor_type)
-        return TRACES[self.typename].allocate_trace()
+        return TRACES[self.typename].allocate_trace(first_state)
 
     def __call__(self, name: str, typename: str, first_state: int, final_state: int, solver: z3.Solver):
         self.typename = typename
         self.reactor_type = self.composite_types[typename]
         self.z3_reactor_type = self.z3_types(typename)
         #self.trace = z3.Array(name,z3.IntSort(), self.z3_reactor_type)
-        self.trace_ID, self.trace = self.create_trace()
+        self.trace_ID, self.trace = self.create_trace(first_state)
         self.first_state = first_state
         self.k0 = first_state
         self.final_state = final_state

@@ -49,7 +49,7 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False, label=''):
+def format_trace(k0, K, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False, label=''):
     z3_trace = solver.model()[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
@@ -59,7 +59,7 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
     else:
         namegetter = thorium_reactor.getDeclaredMemberNames
         getter = thorium_reactor.getDeclaredMemberValues
-    for k in range(N):
+    for k in range(k0,K):
         trace.append(getter(solver.model().eval(z3_trace[k])))
 
     trace = [namegetter()] + trace
@@ -78,7 +78,7 @@ def format_trace(N, solver, thorium_reactor, heap, index, full_model=False, LaTe
         print(r'\hline')
     elif label:
         print(f'\n{label}\n')
-    header = format_string % tuple(['k'] + list(range(N)))
+    header = format_string % tuple(['k'] + list(range(k0,K)))
     print(header)
     if LaTeX:
         print(r'\hline')
@@ -139,7 +139,7 @@ def main(_argv):
                 reactor_traces = reactor_heap.traces
                 thorium_reactor = composite_types[reactor_type]
                 for n in range(reactor_heap.N):
-                    format_trace(args.N, solver, thorium_reactor, reactor_traces, n, args.full_model, LaTeX=args.latex, label=f'{reactor_type}-{n}')
+                    format_trace(reactor_heap.getFirstStateForTrace(n), args.N, solver, thorium_reactor, reactor_traces, n, args.full_model, LaTeX=args.latex, label=f'{reactor_type}-{n}')
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')
