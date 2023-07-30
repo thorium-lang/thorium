@@ -72,9 +72,12 @@ def format_trace(k0, K, solver, thorium_reactor, heap, index, full_model=False, 
 
     format_string = glue.join(('%%%ds' % width) for width in column_widths) + terminator
     if LaTeX:
-        print(r'\begin{centering}')
-        if label: print(f'\\textbf{{{label}}}\\\\')
+        print()
+        print(r'\begin{minipage}[b]{0.3\hsize}\centering')
         print(r'\begin{tabular}{%s}' % ('|c' * len(column_widths) + '|'))
+        if label:
+            print(r'\hline')
+            print(f'\\multicolumn{{{len(column_widths)}}}{{|c|}}{{\\textbf{{{label}}}}}\\\\')
         print(r'\hline')
     elif label:
         print(f'\n{label}\n')
@@ -89,7 +92,7 @@ def format_trace(k0, K, solver, thorium_reactor, heap, index, full_model=False, 
     if LaTeX:
         print(r'\hline')
         print(r'\end{tabular}\\')
-        print(r'\end{centering}')
+        print(r'\end{minipage}')
     else:
         print('-'*len(header))
 

@@ -494,13 +494,12 @@ class ReactorDefiner(ThoriumVisitor):
                 yield self[self.expr_name(arg)]
 
     def hold(self, result, init, update):
-        self.Assert(result.setValue(self.k0 - 1, init[self.k0]))
+        self.Assert(result[self.k0 - 1] == init[self.k0])
         for k in self.streaming_states():
             self.Assert(
-                result.setValue(k,
-                                z3.If(update.isNothing(k),
-                                      result[k-1],
-                                      update[k])))
+                result[k] == z3.If(update.isNothing(k),
+                                   result[k-1],
+                                   update[k]))
 
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())

@@ -102,9 +102,10 @@ class PropertyDefiner(ReactorDefiner):
     def since(self, S: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         self.Assert(S.setValue(self.k0 - 1, False))
         for k in self.all_states():
-            self.Assert(S.setValue(k, z3.Or(q.isTrue(k),
-                                            z3.And(p.isTrue(k),
-                                S(k-1)))))
+            self.Assert(
+                S(k) == z3.Or(q.isTrue(k),
+                              z3.And(p.isTrue(k),
+                                     S(k-1))))
 
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
