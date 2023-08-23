@@ -29,6 +29,19 @@ class TraceHeap:
     def getFirstStateForTrace(self, n):
         return self.first_state_for_trace[n]
 
+class Constant:
+    def __init__(self, value):
+        self.value = value
+
+    def __getitem__(self, index):
+        return self.value
+
+    def __call__(self, index):
+        return self.value
+
+    def isStream(self):
+        return False
+
 class ReactorDefiner(ThoriumVisitor):
     def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
         ThoriumVisitor.__init__(self)
@@ -239,11 +252,12 @@ class ReactorDefiner(ThoriumVisitor):
         self.visitChildren(ctx)
 
     def visitNumber(self, ctx: ThoriumParser.NumberContext):
-        value = int(ctx.NUMBER().getText())
-        result = self[self.expr_name(ctx)]
-        for k in self.all_states():
-            self.Assert(result.setValue(k, value))
-        self.visitChildren(ctx)
+        pass
+        #value = int(ctx.NUMBER().getText())
+        #result = self[self.expr_name(ctx)]
+        #for k in self.all_states():
+        #    self.Assert(result.setValue(k, value))
+        #self.visitChildren(ctx)
 
     def visitUnitConst(self, ctx:ThoriumParser.UnitConstContext):
         (result,) = self.getRVs(ctx)
@@ -259,6 +273,8 @@ class ReactorDefiner(ThoriumVisitor):
         self.visitChildren(ctx)
 
     def __getitem__(self, id: str):
+        if id in self.reactor_type.constants:
+            return Constant(self.reactor_type.constants[id])
         if id in self.local_scope:
             id = self.local_scope[id]
             thorium_type = self.reactor_type.getType(id)
