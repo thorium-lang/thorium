@@ -152,6 +152,8 @@ class ReactorDefiner(ThoriumVisitor):
                 for k in self.all_states():
                     self.Assert(arg_member[k]==accessor(instance[k]))
 
+        result,value = self.getRVs(ctx, ctx.expr())
+
         for k in self.streaming_states():
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
@@ -275,6 +277,9 @@ class ReactorDefiner(ThoriumVisitor):
     def __getitem__(self, id: str):
         if id in self.reactor_type.constants:
             return Constant(self.reactor_type.constants[id])
+        if id in self.reactor_type.id_refs:
+            #print(f'Returning id reference for {id} {self.reactor_type.id_refs[id]} {self[self.reactor_type.id_refs[id]]}')
+            return self[self.reactor_type.id_refs[id]]
         if id in self.local_scope:
             id = self.local_scope[id]
             thorium_type = self.reactor_type.getType(id)
