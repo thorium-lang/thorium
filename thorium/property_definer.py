@@ -74,7 +74,9 @@ class PropertyDefiner(ReactorDefiner):
 
     def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.globally(result, arg)
+        #self.globally(result, arg)
+        for assertion in globally(self.k0, self.kK, result, arg):
+            self.Assert(assertion)
         self.visitChildren(ctx)
 
     def eventually(self, result: ReactiveValue, arg: ReactiveValue):
@@ -109,7 +111,9 @@ class PropertyDefiner(ReactorDefiner):
 
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        self.since(result, p, q)
+        #self.since(result, p, q)
+        for assertion in since(self.k0, self.kK, result, p, q):
+            self.Assert(assertion)
         self.visitChildren(ctx)
 
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
@@ -128,3 +132,24 @@ class PropertyDefiner(ReactorDefiner):
         result, (p, q) = self.getRVs(ctx, ctx.expr())
         self.implication(result, p, q)
         self.visitChildren(ctx)
+
+def globally(k0     : int, # initial state
+             kK     : int, # final state
+             result : ReactiveValue,
+             arg    : ReactiveValue):
+    for k in range(k0, kK+1):
+        yield result[k] == z3.And(arg.isTrue(k),
+                                  result[k+1])
+    # optimistic semantics
+    yield result[kK+1] == True
+
+def since(k0     : int, # initial state
+          kK     : int, # final state
+          result : ReactiveValue,
+          p      : ReactiveValue,
+          q      : ReactiveValue):
+    yield z3.Not(result[k0-1])
+    for k in range(k0, kK+1):
+        yield result[k] == z3.Or(q.isTrue(k),
+                                 z3.And(p.isTrue(k),
+                                        result[k-1]))

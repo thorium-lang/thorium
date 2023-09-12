@@ -477,7 +477,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitSnapshot(self, ctx: ThoriumParser.SnapshotContext):
         result, (cell, stream) = self.getRVs(ctx, ctx.expr())
-        self.snapshot(result, cell, stream)
+        for assertion in snapshot(self.k0, self.kK, result, cell, stream):
+            self.Assert(assertion)
+        #self.snapshot(result, cell, stream)
         self.visit(ctx.expr(0))
         from thorium.snapshot_trigger import SnapshotTrigger
         SnapshotTrigger(self).visit(ctx.expr(1))
@@ -489,7 +491,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitMerge(self, ctx: ThoriumParser.MergeContext):
         result, (s1, s2) = self.getRVs(ctx, ctx.expr())
-        self.merge(result, s1, s2)
+        #self.merge(result, s1, s2)
+        for assertion in merge(self.k0, self.kK, result, s1, s2):
+            self.Assert(assertion)
         self.visitChildren(ctx)
 
     def filter(self, result, value, condition):
@@ -504,7 +508,9 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitFilter(self, ctx: ThoriumParser.FilterContext):
         result, (value, condition) = self.getRVs(ctx, ctx.expr())
-        self.filter(result, value, condition)
+        #self.filter(result, value, condition)
+        for assertion in filter(self.k0, self.kK, result, value, condition):
+            self.Assert(assertion)
         self.visitChildren(ctx)
 
     def getRVs(self,*args):
@@ -524,9 +530,59 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())
-        self.hold(result, init, update)
+        #self.hold(result, init, update)
+        for assertion in hold(self.k0, self.kK, result, init, update):
+            self.Assert(assertion)
         init,update = ctx.expr()
         self.hold_init = True
         self.visit(init)
         self.hold_init = False
         self.visit(update)
+
+def hold(k0     : int, # initial state
+         kK     : int, # final state
+         result : ReactiveValue,
+         init   : ReactiveValue,
+         update : ReactiveValue):
+    yield result[k0-1] == init[k0]
+    for k in range(k0, kK+1):
+        yield result[k] == z3.If(update.isNothing(k),
+                                 result[k-1],
+                                 update[k])
+
+def filter(k0        : int, # initial state
+           kK        : int, # final state
+           result    : ReactiveValue,
+           value     : ReactiveValue,
+           condition : ReactiveValue):
+    yield result.isNothing(k0-1)
+    for k in range(k0, kK+1):
+        active = z3.And(condition.isActive(k),
+                        value.isActive(k),
+                        condition[k])
+        yield z3.If(active,
+                    result.setValue(k,value[k]),
+                    result.isNothing(k))
+
+def snapshot(k0        : int, # initial state
+             kK        : int, # final state
+             result    : ReactiveValue,
+             cell      : ReactiveValue,
+             stream    : ReactiveValue):
+    yield result.isNothing(k0-1)
+    for k in range(k0, kK+1):
+        yield z3.If(stream.isNothing(k),
+                    result.isNothing(k),
+                    result.setValue(k, cell[k]))
+
+def merge(k0     : int, # initial state
+          kK     : int, # final state
+          result : ReactiveValue,
+          s1     : ReactiveValue,
+          s2     : ReactiveValue):
+    yield result.isNothing(k0-1)
+    for k in range(k0, kK+1):
+        yield result(k) == z3.If(s1.isNothing(k),
+                                 s2(k),
+                                 s1(k))
+
