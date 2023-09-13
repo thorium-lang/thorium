@@ -67,6 +67,10 @@ class ReactorDefiner(ThoriumVisitor):
     def streaming_states(self):
         return range(self.first_state, self.final_state+1)
 
+    def AssertAll(self, statements, debug=False):
+        for statement in statements:
+            self.Assert(statement, debug)
+
     def Assert(self, statement, debug=False):
         if debug:
             print(statement)
@@ -477,9 +481,7 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitSnapshot(self, ctx: ThoriumParser.SnapshotContext):
         result, (cell, stream) = self.getRVs(ctx, ctx.expr())
-        for assertion in snapshot(self.k0, self.kK, result, cell, stream):
-            self.Assert(assertion)
-        #self.snapshot(result, cell, stream)
+        self.AssertAll(snapshot(self.k0, self.kK, result, cell, stream))
         self.visit(ctx.expr(0))
         from thorium.snapshot_trigger import SnapshotTrigger
         SnapshotTrigger(self).visit(ctx.expr(1))
@@ -491,9 +493,7 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitMerge(self, ctx: ThoriumParser.MergeContext):
         result, (s1, s2) = self.getRVs(ctx, ctx.expr())
-        #self.merge(result, s1, s2)
-        for assertion in merge(self.k0, self.kK, result, s1, s2):
-            self.Assert(assertion)
+        self.AssertAll(merge(self.k0, self.kK, result, s1, s2))
         self.visitChildren(ctx)
 
     def filter(self, result, value, condition):
@@ -508,9 +508,7 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitFilter(self, ctx: ThoriumParser.FilterContext):
         result, (value, condition) = self.getRVs(ctx, ctx.expr())
-        #self.filter(result, value, condition)
-        for assertion in filter(self.k0, self.kK, result, value, condition):
-            self.Assert(assertion)
+        self.AssertAll(filter(self.k0, self.kK, result, value, condition))
         self.visitChildren(ctx)
 
     def getRVs(self,*args):
@@ -530,9 +528,7 @@ class ReactorDefiner(ThoriumVisitor):
 
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())
-        #self.hold(result, init, update)
-        for assertion in hold(self.k0, self.kK, result, init, update):
-            self.Assert(assertion)
+        self.AssertAll(hold(self.k0, self.kK, result, init, update))
         init,update = ctx.expr()
         self.hold_init = True
         self.visit(init)

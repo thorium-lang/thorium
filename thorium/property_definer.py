@@ -74,9 +74,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        #self.globally(result, arg)
-        for assertion in globally(self.k0, self.kK, result, arg):
-            self.Assert(assertion)
+        self.AssertAll(globally(self.k0, self.kK, result, arg))
         self.visitChildren(ctx)
 
     def eventually(self, result: ReactiveValue, arg: ReactiveValue):
@@ -111,9 +109,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        #self.since(result, p, q)
-        for assertion in since(self.k0, self.kK, result, p, q):
-            self.Assert(assertion)
+        self.AssertAll(since(self.k0, self.kK, result, p, q))
         self.visitChildren(ctx)
 
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
