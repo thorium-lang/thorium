@@ -119,6 +119,8 @@ class ReactorType(DeclType):
                  public_members: List[TypedIdentifier],
                  private_members: List[TypedIdentifier],
                  properties: List[TypedIdentifier]):
+        self.constants = {}
+        self.id_refs = {}
         self.ctx = ctx
         self.name = name
         self.params = params
@@ -248,10 +250,15 @@ class ReactorType(DeclType):
 
     def addSubExpr(self, expr, type_):
         name = self.expr_name(expr)  # it will always have been defined
-        self.subexprs.append(TypedIdentifier(name, type_))
-        self.subexprs_dict[name] = type_
-        self.all_members[name] = type_
-        self.expr_names[expr] = name
+        if isinstance(expr, ThoriumParser.NumberContext):
+            self.constants[name] = int(expr.getText())
+        elif isinstance(expr, ThoriumParser.IdContext):
+            self.id_refs[name] = expr.getText()
+        else:
+            self.subexprs.append(TypedIdentifier(name, type_))
+            self.subexprs_dict[name] = type_
+            self.all_members[name] = type_
+            self.expr_names[expr] = name
 
     def __str__(self):
         return self.name
