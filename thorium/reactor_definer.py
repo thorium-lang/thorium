@@ -43,7 +43,11 @@ class Constant:
         return False
 
 class ReactorDefiner(ThoriumVisitor):
-    def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
+    def __init__(self,
+                 composite_types: dict,
+                 functions: dict,
+                 z3_types: Z3Types,
+                 timestamps: z3.Array):
         ThoriumVisitor.__init__(self)
         self.solver = None
         self.trace = None
@@ -57,6 +61,7 @@ class ReactorDefiner(ThoriumVisitor):
         self.local_scope = {}
         self.traces = {}
         self.hold_init = False
+        self.timestamps = timestamps
 
     def expr_name(self, ctx):
         return self.reactor_type.expr_name(ctx)
@@ -366,7 +371,7 @@ class ReactorDefiner(ThoriumVisitor):
                          args: List[ReactiveValue],
                          result: ReactiveValue,
                          start_state: int):
-        definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types)
+        definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types, self.timestamps)
         instancename = f'{name}-{reactortype.name}-{start_state}'
         definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
         self.Assert(result[start_state]==definer.trace_ID)

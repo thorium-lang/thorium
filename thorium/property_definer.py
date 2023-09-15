@@ -8,7 +8,7 @@ from thorium.reactor_definer import ReactorDefiner
 class PropertyDefiner(ReactorDefiner):
     def __init__(self, parent: ReactorDefiner):
         ThoriumVisitor.__init__(self)
-        ReactorDefiner.__init__(self, parent.composite_types, parent.functions, parent.z3_types)
+        ReactorDefiner.__init__(self, parent.composite_types, parent.functions, parent.z3_types, parent.timestamps)
         self.solver = parent.solver
         self.trace = parent.trace
         self.reactor_type = parent.reactor_type

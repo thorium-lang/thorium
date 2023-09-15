@@ -49,8 +49,9 @@ def parse_thorium_file(filename, debug=False):
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
-def format_trace(k0, K, solver, thorium_reactor, heap, index, full_model=False, LaTeX=False, label=''):
-    z3_trace = solver.model()[heap][index]
+def format_trace(k0, K, solver, timestamps, thorium_reactor, heap, index, full_model=False, LaTeX=False, label=''):
+    model = solver.model()
+    z3_trace = model[heap][index]
     #f = {a.as_long(): b for a, b in z3_trace.as_list()[:-1]}
     trace = []
     if full_model:
@@ -60,9 +61,9 @@ def format_trace(k0, K, solver, thorium_reactor, heap, index, full_model=False, 
         namegetter = thorium_reactor.getDeclaredMemberNames
         getter = thorium_reactor.getDeclaredMemberValues
     for k in range(k0,K):
-        trace.append(getter(solver.model().eval(z3_trace[k])))
+        trace.append([model.eval(timestamps[k]).as_decimal(3)]+getter(model.eval(z3_trace[k])))
 
-    trace = [namegetter()] + trace
+    trace = [['timestamp']+namegetter()] + trace
     column_widths = [max(2,max([len(name) for name in column])) for column in trace]
     glue = '  '
     terminator = ''
@@ -112,9 +113,20 @@ def main(_argv):
 
     composite_types, functions, z3_types = parse_thorium_file(args.filename, debug=args.debug)
 
-    reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
+
+
+
+    timestamps =  z3.Array('timestamps',z3.IntSort(), z3.RealSort())
+    reactor_definer = ReactorDefiner(composite_types, functions, z3_types, timestamps)
     z3.set_param("smt.random_seed", int(time.time()))
     solver = z3.Solver()
+
+
+    solver.add(timestamps[-1] == 0)
+    solver.add(timestamps[0]  == 0)
+    for step in range(args.N):
+        solver.add(timestamps[step] < timestamps[step+1])
+
     if args.reactor:
         reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N-1, solver)
         reactor_type = z3_types(args.reactor)
@@ -142,7 +154,7 @@ def main(_argv):
                 reactor_traces = reactor_heap.traces
                 thorium_reactor = composite_types[reactor_type]
                 for n in range(reactor_heap.N):
-                    format_trace(reactor_heap.getFirstStateForTrace(n), args.N, solver, thorium_reactor, reactor_traces, n, args.full_model, LaTeX=args.latex, label=f'{reactor_type}-{n}')
+                    format_trace(reactor_heap.getFirstStateForTrace(n), args.N, solver, timestamps, thorium_reactor, reactor_traces, n, args.full_model, LaTeX=args.latex, label=f'{reactor_type}-{n}')
 
         if verification_result == z3.unsat:
             print(f'Property "{args.property}" for reactor "{args.reactor}" holds for all runs of {args.N} steps.')
