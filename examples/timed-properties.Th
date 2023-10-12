@@ -1,0 +1,16 @@
+datatype Command {
+
+}
+
+
+reactor client() {
+
+}
+
+reactor server() {
+
+}
+
+reactor manager(addr: Address) {
+    commands: stream Command = Socket(addr)
+}
