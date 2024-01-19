@@ -115,6 +115,7 @@ def main(_argv):
     reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
     z3.set_param("smt.random_seed", int(time.time()))
     solver = z3.Solver()
+    solver.condition = None
     if args.reactor:
         reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N-1, solver)
         reactor_type = z3_types(args.reactor)

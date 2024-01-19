@@ -46,6 +46,7 @@ class ReactorDefiner(ThoriumVisitor):
     def __init__(self, composite_types: dict, functions: dict, z3_types: Z3Types):
         ThoriumVisitor.__init__(self)
         self.solver = None
+        self.condition = None
         self.trace = None
         self.reactor_type = None
         self.first_state = None
@@ -74,7 +75,11 @@ class ReactorDefiner(ThoriumVisitor):
     def Assert(self, statement, debug=False):
         if debug:
             print(statement)
-        return self.solver.add(statement)
+        if self.solver.condition is not None:
+            return self.solver.add(z3.If(self.solver.condition,
+                                         statement,True))
+        else:
+            return self.solver.add(statement)
 
     def apply(self, f: callable,
               args: List[ReactiveValue],
@@ -158,13 +163,21 @@ class ReactorDefiner(ThoriumVisitor):
 
         result,value = self.getRVs(ctx, ctx.expr())
 
+        def condition(k):
+            return z3.And(instance.isActive(k),
+                          case_checker(instance[k]))
+
+
         for k in self.streaming_states():
             self.Assert(z3.If(
                 z3.And(instance.isActive(k),
                        case_checker(instance[k])),
                 result.setValue(k, value[k]),
                 result.isNothing(k)), debug=False)
+
+        self.condition = condition
         self.visitChildren(ctx)
+        self.condition = None
         self.local_scope = {}
 
     def visitMatchCases(self, ctx:ThoriumParser.MatchCasesContext):
@@ -368,7 +381,10 @@ class ReactorDefiner(ThoriumVisitor):
                          start_state: int):
         definer = ReactorDefiner(self.composite_types, self.functions, self.z3_types)
         instancename = f'{name}-{reactortype.name}-{start_state}'
+        if self.condition:
+            self.solver.condition = self.condition(start_state)
         definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
+        self.solver.condition = None
         self.Assert(result[start_state]==definer.trace_ID)
         #print(f'\n\nConstructing {name} at time {start_state}\n')
         for param,arg in zip([definer[name] for name in reactortype.getParamNames()],args):
