@@ -46,7 +46,7 @@ reactorParam: ID COLON reactiveType;
 
 reactorMembers: reactorMember (SEMI reactorMember)* SEMI?;
 
-reactorMember: ID COLON reactiveType EQUALS expr;
+reactorMember: ID COLON reactiveType (EQUALS expr)?;
 
 reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
 

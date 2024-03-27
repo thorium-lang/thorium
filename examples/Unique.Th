@@ -1,10 +1,23 @@
+datatype Message {
+    Alarm : int
+  | Dismiss : int
+}
+
+
+
 reactor Worker {
     id: cell int = uuid();
+    message: stream Message = Message::Alarm(id) @ alarm;
+private:
+    alarm: stream unit;
 }
 
 reactor Manager {
   worker1: const Worker = Worker();
-  worker2: cell Worker = Worker();
+  worker2: const Worker = Worker();
+private:
+  latest_alarm: int = 0 .. match worker1.message |
+                                 worker2.message   {Message::Alarm(id) => id}
 properties:
   collision: G (worker1.id != worker2.id);
   low: G P worker1.id == 1005;

@@ -56,7 +56,8 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitReactorMember(self, ctx: ThoriumParser.ReactorMemberContext):
         self.set_expr_name(ctx.expr(), ctx.ID().getText())
         # todo: typecheck
-        self.visit(ctx.expr())
+        if ctx.expr():
+            self.visit(ctx.expr())
 
     def visitReactorProperty(self, ctx: ThoriumParser.ReactorPropertyContext):
         self.set_expr_name(ctx.property_(), ctx.ID().getText())
