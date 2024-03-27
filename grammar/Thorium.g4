@@ -100,7 +100,7 @@ expr:
     | NUMBER                     # number
     | STAR expr STAR             # changes
     | LPAREN expr RPAREN         # paren
-    | ID LPAREN expr (COMMA expr)* RPAREN # apply
+    | ID (UNITCONST|LPAREN (expr (COMMA expr)*)? RPAREN) # apply
     | expr op=(STAR|DIV) expr    # mult
     | expr op=(PLUS|MINUS) expr  # add
     | expr op=(LT|LE|GT|GE) expr # compare

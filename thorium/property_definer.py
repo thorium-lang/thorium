@@ -89,6 +89,15 @@ class PropertyDefiner(ReactorDefiner):
         self.eventually(result, arg)
         self.visitChildren(ctx)
 
+    def previously(self, result: ReactiveValue, arg: ReactiveValue):
+        for k in self.streaming_states():
+            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
+        self.Assert(z3.Not(result.isTrue(self.k0-1)))  # pessimistic semantics
+    def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
+        result, arg = self.getRVs(ctx, ctx.ltlProperty())
+        self.previously(result, arg)
+        self.visitChildren(ctx)
+
     def until(self, U: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         for k in self.all_states():
             self.Assert(U(k) == z3.Or(q.isTrue(k),

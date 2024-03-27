@@ -1,0 +1,11 @@
+reactor Worker {
+    id: cell int = uuid();
+}
+
+reactor Manager {
+  worker1: const Worker = Worker();
+  worker2: cell Worker = Worker();
+properties:
+  collision: G (worker1.id != worker2.id);
+  low: G P worker1.id == 1005;
+}

@@ -86,6 +86,9 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
         self.visitSubExpr(ctx, ctx.ltlProperty())
         return Cell('bool')
+    def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
+        self.visitSubExpr(ctx, ctx.ltlProperty())
+        return Cell('bool')
 
     def visitLtlUntil(self, ctx: ThoriumParser.LtlUntilContext):
         self.visitSubExprs(ctx, ctx.ltlProperty())
@@ -126,6 +129,8 @@ class SubExprTypeCheck(ThoriumVisitor):
             return Cell('bool')
         if ctx.ID().getText() == 'unit':
             return Stream('unit')
+        if ctx.ID().getText() == 'uuid':
+            return Cell('int')
 
         f = self.getDeclType(ctx.ID().getText())
         if isinstance(f, Function):
@@ -209,6 +214,8 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitId(self, ctx: ThoriumParser.IdContext):
         ID = ctx.ID().getText()
+        if ID == 'uuid':
+            return Cell('int')
         if ID in self.decls:
             return ID
         # captures enum constructors; could this be handled more generally?

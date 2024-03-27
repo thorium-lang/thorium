@@ -9,6 +9,7 @@ from thorium.decls import StructType, ReactorType
 
 TRACES = {}
 
+UUID = 1001
 
 class TraceHeap:
     def __init__(self, typename, z3_reactor_type):
@@ -442,6 +443,12 @@ class ReactorDefiner(ThoriumVisitor):
             from thorium.snapshot_trigger import SnapshotTrigger
             SnapshotTrigger(self).visitChildren(ctx)
             self.inactive(args,result)
+        elif ctx.ID().getText()=='uuid':
+            global UUID
+            uuid = UUID
+            UUID += 1
+            for k in self.all_states():
+                self.Assert(result[k] == uuid)
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):

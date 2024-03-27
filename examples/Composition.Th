@@ -46,6 +46,6 @@ private:
     test: cell Add = Add(a,b) .. Add(x,y);
     act: cell bool = active(x) and active(y);
 properties:
-    valid: ((G (active(x) and active(y))) and (G pretty)) -> (G ((mode == 2) -> (result == option1)));
+    valid: ((G (active(x) and active(y))) and (G pretty)) -> (G ((mode == 1) -> (result == option1)));
     case2: G ((mode == 2) -> (result == option2));
 }
