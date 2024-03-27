@@ -1,0 +1,51 @@
+reactor Add(a: cell int, b: cell int) {
+    out: cell int = a + b;
+}
+
+reactor Double(a: cell int) {
+    out: cell int = 2*a;
+}
+
+reactor xCompose(a: cell int, b: cell int, c: cell int,
+                mode1: stream unit, mode2: stream unit,
+                x: stream int, y: stream int){
+    result: cell int = double.out;
+private:
+    sum: cell Add = Add(a,b) .. Add(a,b) @ mode1
+                              | Add(b,c) @ mode2;
+    double: const Double = Double(sum.out);
+    mode: cell int = 1 .. 1 @ mode1
+                        | 2 @ mode2;
+    test: cell Add = Add(a,b) .. Add(x,y);
+properties:
+    valid: G (((mode == 1) or (mode == 1))
+              and (mode == 1) -> (result == 2*(a+b))
+              and (mode == 1) -> (result == 2*(b+c)));
+}
+reactor Compose(a: cell int, b: cell int, c: cell int,
+                mode1: stream unit, mode2: stream unit,
+                x: stream int, y: stream int){
+    result: cell int = double.out;
+private:
+    option1: cell int = 2*(a+b);
+    option2: cell int = 2*(b+c);
+
+    double: const Double = Double(sum.out);
+    sum: cell Add = Add(a,b) .. Add(a,b) @ mode1
+                              | Add(b,c) @ mode2;
+    mode: cell int = 1 .. 1 @ mode1
+                        | 2 @ mode2;
+    bad: const int = 1 + a + b + c;
+    XX: cell int = 1 .. x;
+    YY: cell int = 1 .. y;
+    pretty: cell bool = 0<a and a<11 and
+                        0<b and b<11 and
+                        0<c and c<11 and
+                        0<XX and XX<11 and
+                        0<YY and YY<11;
+    test: cell Add = Add(a,b) .. Add(x,y);
+    act: cell bool = active(x) and active(y);
+properties:
+    valid: ((G (active(x) and active(y))) and (G pretty)) -> (G ((mode == 2) -> (result == option1)));
+    case2: G ((mode == 2) -> (result == option2));
+}

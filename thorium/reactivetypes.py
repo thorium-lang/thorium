@@ -10,6 +10,9 @@ class Cell:
     def __str__(self):
         return f'cell-{self.type}'
 
+    def isStream(self): return False
+
+class Const(Cell): pass
 
 class Stream:
     def __init__(self, type_):
@@ -28,6 +31,8 @@ class Stream:
 
     def __eq__(self, other):
         return isinstance(other, Stream) and (self.type == other.type)
+
+    def isStream(self): return True
 
 class ReactiveValue:
     def __init__(self, trace, accessor, thorium_type, z3_type):

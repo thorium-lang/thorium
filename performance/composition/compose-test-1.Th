@@ -9,8 +9,9 @@ datatype CFG {
 }
 
 reactor Pipeline(cfg: stream CFG, in: stream int) {
-    s1: cell Mult = Mult(1, in)
-                    .. match cfg { CFG::S1(c) => Mult(c, in) };
+    updates: stream Mult = match cfg { CFG::S1(c) => Mult(c, in) };
+    s1: cell Mult = Mult(1, in) .. updates;
+    //s1: cell Mult = Mult(2, in);
     out: stream int = s1.out;
 private:
     C: cell int = 0 .. match cfg { CFG::S1(c) => c
@@ -19,5 +20,7 @@ private:
                                  };
 properties:
     bounded: (G (0<=C and C<10)) => not F ( (in==1) and
-                                            (out/in > 1) );
+                                            (out/in > 10) );
+    //bounded: ((G active(cfg)) and (G active(in)) and (G (C>5))) -> (G out/in < 1);
 }
+

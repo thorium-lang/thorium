@@ -123,7 +123,7 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitApply(self, ctx: ThoriumParser.ApplyContext):
         types = self.visitSubExprs(ctx)
         if ctx.ID().getText() in ['active','inactive']:
-            return Stream('bool')
+            return Cell('bool')
         if ctx.ID().getText() == 'unit':
             return Stream('unit')
 
@@ -132,6 +132,7 @@ class SubExprTypeCheck(ThoriumVisitor):
             result_type = f.result_type
         else:
             result_type = f.name
+        #TODO: This is not necessarily correct for reactors
         if hasStreamType(types):
             return Stream(result_type)
         return result_type

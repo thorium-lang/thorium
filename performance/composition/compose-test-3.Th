@@ -23,5 +23,5 @@ private:
                                  };
 properties:
     bounded: (G (0<=C and C<10)) => not F ( (in==1) and
-                                            (out/in > 100) );
+                                            (out/in > 1000) );
 }

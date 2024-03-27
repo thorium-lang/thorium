@@ -52,7 +52,7 @@ reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
 
 reactorProperty: ID COLON property;
 
-reactiveType: (CELL|STREAM) type;
+reactiveType: (CONST|CELL|STREAM) type;
 
 type : ID ;
 
@@ -153,6 +153,7 @@ UNTIL      : 'U' ;
 SINCE      : 'S' ;
 IMPLIES    : '->' ;
 LTLIMPLIES : '=>' ;
+CONST      : 'const';
 MATCH      : 'match';
 MATCHES    : 'matches';
 FORALL     : 'forall' ;

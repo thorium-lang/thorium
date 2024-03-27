@@ -1,5 +1,5 @@
 reactor Mult( c: cell int, in : stream int) {
-    out: stream int = c * in;
+    out: stream int = c + in;
 }
 
 datatype CFG {
