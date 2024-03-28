@@ -46,13 +46,13 @@ reactorParam: ID COLON reactiveType;
 
 reactorMembers: reactorMember (SEMI reactorMember)* SEMI?;
 
-reactorMember: ID COLON reactiveType EQUALS expr;
+reactorMember: ID COLON reactiveType (EQUALS expr)?;
 
 reactorProperties: reactorProperty (SEMI reactorProperty)* SEMI?;
 
 reactorProperty: ID COLON property;
 
-reactiveType: (CELL|STREAM) type;
+reactiveType: (CONST|CELL|STREAM) type;
 
 type : ID ;
 
@@ -100,7 +100,7 @@ expr:
     | NUMBER                     # number
     | STAR expr STAR             # changes
     | LPAREN expr RPAREN         # paren
-    | ID LPAREN expr (COMMA expr)* RPAREN # apply
+    | ID (UNITCONST|LPAREN (expr (COMMA expr)*)? RPAREN) # apply
     | expr op=(STAR|DIV) expr    # mult
     | expr op=(PLUS|MINUS) expr  # add
     | expr op=(LT|LE|GT|GE) expr # compare
@@ -153,6 +153,7 @@ UNTIL      : 'U' ;
 SINCE      : 'S' ;
 IMPLIES    : '->' ;
 LTLIMPLIES : '=>' ;
+CONST      : 'const';
 MATCH      : 'match';
 MATCHES    : 'matches';
 FORALL     : 'forall' ;

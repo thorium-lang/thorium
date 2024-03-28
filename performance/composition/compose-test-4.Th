@@ -1,11 +1,12 @@
 reactor Mult( c: cell int, in : stream int) {
-    out: stream int = c * in;
+    out: stream int = c + in;
 }
 
 datatype CFG {
     S1: int
   | S2: int
   | S3: int
+  | S4: int
 }
 
 reactor Pipeline(cfg: stream CFG, in: stream int) {
@@ -13,13 +14,18 @@ reactor Pipeline(cfg: stream CFG, in: stream int) {
                     .. match cfg { CFG::S1(c) => Mult(c, in) };
     s2: cell Mult = Mult(1, s1.out)
                     .. match cfg { CFG::S2(c) => Mult(c, s1.out) };
-    out: stream int = s2.out;
+    s3: cell Mult = Mult(1, s2.out)
+                    .. match cfg { CFG::S3(c) => Mult(c, s2.out) };
+    s4: cell Mult = Mult(1, s3.out)
+                    .. match cfg { CFG::S4(c) => Mult(c, s3.out) };
+    out: stream int = s4.out;
 private:
     C: cell int = 0 .. match cfg { CFG::S1(c) => c
                                  | CFG::S2(c) => c
                                  | CFG::S3(c) => c
+                                 | CFG::S4(c) => c
                                  };
 properties:
     bounded: (G (0<=C and C<10)) => not F ( (in==1) and
-                                            (out/in > 100) );
+                                            (out/in > 1000) );
 }

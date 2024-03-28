@@ -1,7 +1,7 @@
 from thorium import ThoriumVisitor, ThoriumParser
 from thorium.decls import Function, ReactorType, StructType, EnumType, \
                           TypedIdentifier
-from thorium.reactivetypes import Cell, Stream
+from thorium.reactivetypes import Const, Cell, Stream
 from collections.abc import Iterable
 
 
@@ -95,6 +95,8 @@ class ParseDeclarations(ThoriumVisitor):
                              self.visit(ctx.enumMembers()))
 
     def visitReactiveType(self, ctx: ThoriumParser.ReactiveTypeContext):
+        if ctx.CONST():
+            return Const(self.visit(ctx.type_()))
         if ctx.CELL():
             return Cell(self.visit(ctx.type_()))
         return Stream(self.visit(ctx.type_()))

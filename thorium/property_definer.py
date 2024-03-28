@@ -20,6 +20,8 @@ class PropertyDefiner(ReactorDefiner):
         self.composite_types = parent.composite_types
         self.functions = parent.functions
         self.z3_types = parent.z3_types
+        self.const_def = parent.const_def
+        self.debug_assert = parent.debug_assert
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
@@ -85,6 +87,15 @@ class PropertyDefiner(ReactorDefiner):
     def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
         self.eventually(result, arg)
+        self.visitChildren(ctx)
+
+    def previously(self, result: ReactiveValue, arg: ReactiveValue):
+        for k in self.streaming_states():
+            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
+        self.Assert(z3.Not(result.isTrue(self.k0-1)))  # pessimistic semantics
+    def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
+        result, arg = self.getRVs(ctx, ctx.ltlProperty())
+        self.previously(result, arg)
         self.visitChildren(ctx)
 
     def until(self, U: ReactiveValue, p: ReactiveValue, q: ReactiveValue):

@@ -6,7 +6,7 @@ import antlr4
 import z3
 from thorium import ThoriumLexer, ThoriumParser
 from thorium.decls import Function, ReactorType
-from thorium.reactor_definer import ReactorDefiner, TRACES
+from thorium.reactor_definer import ReactorDefiner, TRACES, TraceHeap
 from thorium.parse_declarations import ParseDeclarations
 from thorium.typechecking import SubExprTypeCheck
 from thorium.z3types import Z3Types
@@ -44,6 +44,9 @@ def parse_thorium_file(filename, debug=False):
             z3_types.addDatatype(declaration)
             composite_types.append(declaration)
     z3_types.finalizeDatatypes()
+    for name in [r.name for r in composite_types
+                 if isinstance(r, ReactorType)]:
+        TRACES[name] = TraceHeap(name, z3_types(name))
     for f in functions:
         f.setTypeContext(z3_types)
 
@@ -115,6 +118,7 @@ def main(_argv):
     reactor_definer = ReactorDefiner(composite_types, functions, z3_types)
     z3.set_param("smt.random_seed", int(time.time()))
     solver = z3.Solver()
+    solver.condition = None
     if args.reactor:
         reactor = reactor_definer(f'{args.reactor}-main', args.reactor, 0, args.N-1, solver)
         reactor_type = z3_types(args.reactor)
