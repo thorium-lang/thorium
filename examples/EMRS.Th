@@ -41,16 +41,16 @@ datatype AuthOwnRecordFor {
 }
 
 datatype RequestAuthRelease{
-    sender       : Actor,
-    sendingPrinc : Principal,
-    subject      : Principal,
-    record       : Record
+    sender           : Actor,
+    sendingPrincipal : Principal,
+    subject          : Principal,
+    record           : Record
 }
 
 datatype RegisterLogin {
-    actor         : Actor,
-    loggedInPrinc : Principal,
-    idOfPrinc     : int
+    actor             : Actor,
+    loggedInPrincipal : Principal,
+    idOfPrincipal     : int
 }
 
 datatype LookupPrinc {
@@ -70,16 +70,20 @@ datatype Message {
  |  authOwnRecordFor    : AuthOwnRecordFor
  |  requestAuthRelease  : RequestAuthRelease
  |  registerLogin       : RegisterLogin
- |  lookupPrinc         : LookupPrinc
+ |  lookupPrincipal     : LookupPrincipal
  |  foundPrinc          : FoundPrinc
  |  princNotFound
 }
+
+
 
 reactor Directory(inbox : stream Message) {
 
 private:
 
     logins : stream RegisterLogin =
+        match inbox {Message::registerLogin(m) => m};
+    lookupPrincipal : stream RegisterLogin =
         match inbox {Message::registerLogin(m) => m};
 }
 
@@ -94,4 +98,8 @@ properties:
     nP_login : not P_login;
     test : (nP_login) or (not F_login);
     valid : ((P login) -> X (not F login));
+}
+
+reactor requestList(lookup: stream   {
+
 }
