@@ -250,7 +250,10 @@ class ReactorType(DeclType):
 
     def addSubExpr(self, expr, type_):
         name = self.expr_name(expr)  # it will always have been defined
-        if isinstance(expr, ThoriumParser.NumberContext):
+        if isinstance(expr,ThoriumParser.LtlExprContext) and\
+           isinstance(expr.expr(),ThoriumParser.IdContext):
+            self.id_refs[name] = expr.getText()
+        elif isinstance(expr, ThoriumParser.NumberContext):
             self.constants[name] = int(expr.getText())
         elif isinstance(expr, ThoriumParser.IdContext):
             self.id_refs[name] = expr.getText()

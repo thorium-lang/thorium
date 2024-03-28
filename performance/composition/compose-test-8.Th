@@ -7,6 +7,10 @@ datatype CFG {
   | S2: int
   | S3: int
   | S4: int
+  | S5: int
+  | S6: int
+  | S7: int
+  | S8: int
 }
 
 reactor Pipeline(cfg: stream CFG, in: stream int) {
@@ -18,12 +22,24 @@ reactor Pipeline(cfg: stream CFG, in: stream int) {
                     .. match cfg { CFG::S3(c) => Sum(c, s2.out) };
     s4: cell Sum = Sum(1, s3.out)
                     .. match cfg { CFG::S4(c) => Sum(c, s3.out) };
-    out: stream int = s4.out;
+    s5: cell Sum = Sum(1, s4.out)
+                    .. match cfg { CFG::S5(c) => Sum(c, s4.out) };
+    s6: cell Sum = Sum(1, s5.out)
+                    .. match cfg { CFG::S6(c) => Sum(c, s5.out) };
+    s7: cell Sum = Sum(1, s6.out)
+                    .. match cfg { CFG::S7(c) => Sum(c, s6.out) };
+    s8: cell Sum = Sum(1, s7.out)
+                    .. match cfg { CFG::S8(c) => Sum(c, s7.out) };
+    out: stream int = s8.out;
 private:
     C: cell int = 0 .. match cfg { CFG::S1(c) => c
                                  | CFG::S2(c) => c
                                  | CFG::S3(c) => c
                                  | CFG::S4(c) => c
+                                 | CFG::S5(c) => c
+                                 | CFG::S6(c) => c
+                                 | CFG::S7(c) => c
+                                 | CFG::S8(c) => c
                                  };
 properties:
     bounded: (G (0<=C and C<10)) => not F ( (in==1) and

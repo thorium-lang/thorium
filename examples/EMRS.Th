@@ -1,0 +1,97 @@
+datatype Authorizer {
+    id : int
+}
+
+datatype Principal {
+    id : int
+}
+
+datatype Actor {
+    id : int
+}
+
+datatype Record {
+    id         : int,
+    requester  : int,
+    originator : int,
+    data       : int
+}
+
+datatype RequestAuth {
+    sender : Authorizer,
+    sys    : Principal
+}
+
+datatype DecideAuth {
+    sender    : Authorizer,
+    requester : Principal,
+    subject   : Record
+}
+
+datatype AuthRelease {
+    sender     : Actor,
+    authorizer : Principal,
+    record     : Record
+}
+
+datatype AuthOwnRecordFor {
+    sender     : Actor,
+    authorizer : Principal,
+    record     : Record
+}
+
+datatype RequestAuthRelease{
+    sender       : Actor,
+    sendingPrinc : Principal,
+    subject      : Principal,
+    record       : Record
+}
+
+datatype RegisterLogin {
+    actor         : Actor,
+    loggedInPrinc : Principal,
+    idOfPrinc     : int
+}
+
+datatype LookupPrinc {
+    sender    : Actor,
+    idOfPrinc : int
+}
+
+datatype FoundPrinc {
+    owner       : Principal,
+    ownersActor : Actor
+}
+
+datatype Message {
+    requestAuth         : RequestAuth
+ |  decideAuth          : DecideAuth
+ |  authRelease         : AuthRelease
+ |  authOwnRecordFor    : AuthOwnRecordFor
+ |  requestAuthRelease  : RequestAuthRelease
+ |  registerLogin       : RegisterLogin
+ |  lookupPrinc         : LookupPrinc
+ |  foundPrinc          : FoundPrinc
+ |  princNotFound
+}
+
+reactor Directory(inbox : stream Message) {
+
+private:
+
+    logins : stream RegisterLogin =
+        match inbox {Message::registerLogin(m) => m};
+}
+
+reactor EMRS {
+    directory : const Directory = Directory(messages);
+    messages: stream Message;
+    a: cell int = 0 .. match messages {Message::registerLogin(m) => m.actor.id};
+    login : cell bool = active(messages matches Message::registerLogin);
+properties:
+    P_login  : P login;
+    F_login  : F login;
+    nP_login : not P_login;
+    test : (nP_login) or (not F_login);
+    valid : ((P login) -> X (not F login));
+}
