@@ -87,6 +87,7 @@ class SubExprTypeCheck(ThoriumVisitor):
     def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
         self.visitSubExpr(ctx, ctx.ltlProperty())
         return Cell('bool')
+
     def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
         self.visitSubExpr(ctx, ctx.ltlProperty())
         return Cell('bool')

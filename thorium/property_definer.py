@@ -90,9 +90,14 @@ class PropertyDefiner(ReactorDefiner):
         self.visitChildren(ctx)
 
     def previously(self, result: ReactiveValue, arg: ReactiveValue):
-        for k in self.streaming_states():
-            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
+        #for k in self.streaming_states():
+        #    print(f'previously asserting at {k}')
+        #    self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
         self.Assert(z3.Not(result.isTrue(self.k0-1)))  # pessimistic semantics
+        self.Assert(result(self.k0) == arg.isTrue(self.k0))
+        for k in range(self.k0+1,self.kK+1):
+            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
+
     def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
         result, arg = self.getRVs(ctx, ctx.ltlProperty())
         self.previously(result, arg)
@@ -128,7 +133,7 @@ class PropertyDefiner(ReactorDefiner):
 
     def implication(self, result: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
         for k in self.all_states():
-            self.Assert(result.setValue(k, z3.Or(q.isTrue(k), z3.Not(p.isTrue(k)))))
+            self.Assert(result.setValue(k, z3.Or(z3.Not(p.isTrue(k)), q.isTrue(k))))
 
     def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
         result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())

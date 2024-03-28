@@ -445,10 +445,16 @@ class ReactorDefiner(ThoriumVisitor):
             self.inactive(args,result)
         elif ctx.ID().getText()=='uuid':
             global UUID
-            uuid = UUID
-            UUID += 1
-            for k in self.all_states():
-                self.Assert(result[k] == uuid)
+            if self.const_def:
+                uuid = UUID
+                UUID += 1
+                for k in self.all_states():
+                    self.Assert(result[k] == uuid)
+            else:
+                for k in self.all_states():
+                    uuid = UUID
+                    UUID += 1
+                    self.Assert(result[k] == uuid)
         else:
             callable = self[ctx.ID().getText()]
             if isinstance(callable, ReactorType):
