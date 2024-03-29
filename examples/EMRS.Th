@@ -1,105 +1,124 @@
-datatype Authorizer {
-    id : int
-}
-
-datatype Principal {
-    id : int
-}
-
-datatype Actor {
-    id : int
-}
-
-datatype Record {
-    id         : int,
-    requester  : int,
-    originator : int,
-    data       : int
-}
-
-datatype RequestAuth {
-    sender : Authorizer,
-    sys    : Principal
-}
-
-datatype DecideAuth {
-    sender    : Authorizer,
-    requester : Principal,
-    subject   : Record
-}
-
 datatype AuthRelease {
-    sender     : Actor,
-    authorizer : Principal,
-    record     : Record
+    requesterID  : int,
+    recipientID  : int,
+    subjectID    : int,
+    recordID     : int
 }
 
 datatype AuthOwnRecordFor {
-    sender     : Actor,
-    authorizer : Principal,
-    record     : Record
+    recipientID  : int,
+    subjectID    : int,
+    recordID     : int
 }
 
 datatype RequestAuthRelease{
-    sender           : Actor,
-    sendingPrincipal : Principal,
-    subject          : Principal,
-    record           : Record
-}
-
-datatype RegisterLogin {
-    actor             : Actor,
-    loggedInPrincipal : Principal,
-    idOfPrincipal     : int
-}
-
-datatype LookupPrinc {
-    sender    : Actor,
-    idOfPrinc : int
-}
-
-datatype FoundPrinc {
-    owner       : Principal,
-    ownersActor : Actor
+    requesterID  : int,
+    recipientID  : int,
+    subjectID    : int,
+    recordID     : int
 }
 
 datatype Message {
-    requestAuth         : RequestAuth
- |  decideAuth          : DecideAuth
- |  authRelease         : AuthRelease
+    authRelease         : AuthRelease
  |  authOwnRecordFor    : AuthOwnRecordFor
  |  requestAuthRelease  : RequestAuthRelease
- |  registerLogin       : RegisterLogin
- |  lookupPrincipal     : LookupPrincipal
- |  foundPrinc          : FoundPrinc
- |  princNotFound
 }
 
+reactor Authorizer(ownAuths     : stream AuthOwnRecordFor,
+                   authRequests : stream RequestAuthRelease) {
 
-
-reactor Directory(inbox : stream Message) {
+    auths : stream AuthRelease
+        = AuthRelease(authRequests.requesterID,
+                      authRequests.recipientID,
+                      authRequests.subjectID,
+                      authRequests.recordID)
+             if
+                 authRequests.recipientID == list.authorized.recipientID and
+                 authRequests.subjectID   == list.authorized.subjectID and
+                 authRequests.recordID    == list.authorized.recordID;
 
 private:
+    list: const AuthorizedList = AuthorizedList(ownAuths,authRequests);
+}
 
-    logins : stream RegisterLogin =
-        match inbox {Message::registerLogin(m) => m};
-    lookupPrincipal : stream RegisterLogin =
-        match inbox {Message::registerLogin(m) => m};
+reactor Patient {
+    id : const int = uuid();
+    auths : stream AuthOwnRecordFor
+        = AuthOwnRecordFor(recipientID,
+                           id,
+                           recordID);
+private:
+    recipientID : stream int; // unconstrained
+    recordID    : stream int; // unconstrained
+}
+
+reactor Provider {
+    id       : const int = uuid();
+    requests : stream RequestAuthRelease
+        = RequestAuthRelease(id,
+                             recipientID,
+                             subjectID,
+                             recordID);
+private:
+    recipientID  : stream int; // unconstrained
+    subjectID    : stream int; // unconstrained
+    recordID     : stream int; // unconstrained
 }
 
 reactor EMRS {
-    directory : const Directory = Directory(messages);
-    messages: stream Message;
-    a: cell int = 0 .. match messages {Message::registerLogin(m) => m.actor.id};
-    login : cell bool = active(messages matches Message::registerLogin);
+    patient1  : const Patient  = Patient();
+    patient2  : const Patient  = Patient();
+    hospital1 : const Provider = Provider();
+    hospital2 : const Provider = Provider();
+    authorizer : const Authorizer = Authorizer(patient1.auths|
+                                               patient2.auths,
+                                               hospital1.requests|
+                                               hospital2.requests);
+private:
+    auths : stream AuthRelease = authorizer.auths;
+    requests : stream RequestAuthRelease = hospital1.requests|
+                                           hospital2.requests;
 properties:
-    P_login  : P login;
-    F_login  : F login;
-    nP_login : not P_login;
-    test : (nP_login) or (not F_login);
-    valid : ((P login) -> X (not F login));
+
+    p1_auth_42:   (patient1.auths.recipientID == 42) and
+                  (patient1.auths.recordID    == 24);
+    h_req_p1_42:  (requests.subjectID   == patient1.id) and
+                  (requests.recipientID == 42) and
+                  (requests.recordID    == 24);
+    auth_p1_42:   (auths.subjectID   == patient1.id) and
+                  (auths.recipientID == 42) and
+                  (auths.recordID    == 24);
+
+    authorized:
+        G (auth_p1_42 -> P p1_auth_42);
+        //G (p1_auth_42 -> ( G (h_req_p1_42 -> auth_p1_42) ));
 }
 
-reactor requestList(lookup: stream   {
+reactor AuthorizedList(auth: stream AuthOwnRecordFor,
+                       request:       stream RequestAuthRelease){
 
+    authorized: stream RequestAuthRelease =
+        request if (((num_authorized>0) and ((record1.subjectID == request.subjectID) and (record1.recipientID == request.recipientID) and (record1.recordID == request.recordID)))
+                or  ((num_authorized>1) and ((record2.subjectID == request.subjectID) and (record2.recipientID == request.recipientID) and (record2.recordID == request.recordID)))
+                or  ((num_authorized>2) and ((record3.subjectID == request.subjectID) and (record3.recipientID == request.recipientID) and (record3.recordID == request.recordID)))
+                or  ((num_authorized>3) and ((record4.subjectID == request.subjectID) and (record4.recipientID == request.recipientID) and (record4.recordID == request.recordID)))
+                or  ((num_authorized>4) and ((record5.subjectID == request.subjectID) and (record5.recipientID == request.recipientID) and (record5.recordID == request.recordID)))
+                or  ((num_authorized>5) and ((record6.subjectID == request.subjectID) and (record6.recipientID == request.recipientID) and (record6.recordID == request.recordID)))
+                or  ((num_authorized>6) and ((record7.subjectID == request.subjectID) and (record7.recipientID == request.recipientID) and (record7.recordID == request.recordID)))
+                or  ((num_authorized>7) and ((record8.subjectID == request.subjectID) and (record8.recipientID == request.recipientID) and (record8.recordID == request.recordID)))
+                or  ((num_authorized>8) and ((record9.subjectID == request.subjectID) and (record9.recipientID == request.recipientID) and (record9.recordID == request.recordID)))
+                or  ((num_authorized>9) and ((record10.subjectID == request.subjectID) and (record10.recipientID == request.recipientID) and (record10.recordID == request.recordID))));
+private:
+    record1:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==1;
+    record2:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==2;
+    record3:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==3;
+    record4:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==4;
+    record5:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==5;
+    record6:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==6;
+    record7:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==7;
+    record8:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==8;
+    record9:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==9;
+    record10: cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==10;
+
+    num_authorized: cell int = 0 .. ~num_authorized + 1 @ auth
 }
