@@ -18,12 +18,6 @@ datatype RequestAuthRelease{
     recordID     : int
 }
 
-datatype Message {
-    authRelease         : AuthRelease
- |  authOwnRecordFor    : AuthOwnRecordFor
- |  requestAuthRelease  : RequestAuthRelease
-}
-
 reactor Authorizer(ownAuths     : stream AuthOwnRecordFor,
                    authRequests : stream RequestAuthRelease) {
 
@@ -65,60 +59,102 @@ private:
     recordID     : stream int; // unconstrained
 }
 
-reactor EMRS {
-    patient1  : const Patient  = Patient();
-    patient2  : const Patient  = Patient();
+reactor EMRS(new_patient : stream unit) {
+    //patient1  : const Patient  = Patient();
+    //patient2  : const Patient  = Patient();
+    patients : const PatientList = PatientList(new_patient);
+
     hospital1 : const Provider = Provider();
     hospital2 : const Provider = Provider();
-    authorizer : const Authorizer = Authorizer(patient1.auths|
-                                               patient2.auths,
+    authorizer : const Authorizer = Authorizer(patients.auths,
                                                hospital1.requests|
                                                hospital2.requests);
 private:
     auths : stream AuthRelease = authorizer.auths;
     requests : stream RequestAuthRelease = hospital1.requests|
                                            hospital2.requests;
+    p1id : cell int = patients.patient1.id;
+    pauths : stream AuthOwnRecordFor = patients.auths;
 properties:
 
-    p1_auth_42:   (patient1.auths.recipientID == 42) and
-                  (patient1.auths.recordID    == 24);
-    h_req_p1_42:  (requests.subjectID   == patient1.id) and
+    p1_auth_42:   (patients.auths.recipientID == 42) and
+                  (patients.auths.subjectID   == patients.patient1.id) and
+                  (patients.auths.recordID    == 24);
+    h_req_p1_42:  (requests.subjectID   == patients.patient1.id) and
                   (requests.recipientID == 42) and
                   (requests.recordID    == 24);
-    auth_p1_42:   (auths.subjectID   == patient1.id) and
+    auth_p1_42:   (auths.subjectID   == patients.patient1.id) and
                   (auths.recipientID == 42) and
                   (auths.recordID    == 24);
 
     authorized:
         G (auth_p1_42 -> P p1_auth_42);
-        //G (p1_auth_42 -> ( G (h_req_p1_42 -> auth_p1_42) ));
+    all_authorized_requests_honored:
+        G (p1_auth_42 -> ( G (h_req_p1_42 -> auth_p1_42) ));
 }
 
-reactor AuthorizedList(auth: stream AuthOwnRecordFor,
-                       request:       stream RequestAuthRelease){
+function authorizes(request : RequestAuthRelease,
+                    record  : AuthOwnRecordFor) -> bool {
+    result == ((record.subjectID == request.subjectID) and
+               (record.recipientID == request.recipientID) and
+               (record.recordID == request.recordID));
+}
+
+reactor AuthorizedList(auth:    stream AuthOwnRecordFor,
+                       request: stream RequestAuthRelease){
 
     authorized: stream RequestAuthRelease =
-        request if (((num_authorized>0) and ((record1.subjectID == request.subjectID) and (record1.recipientID == request.recipientID) and (record1.recordID == request.recordID)))
-                or  ((num_authorized>1) and ((record2.subjectID == request.subjectID) and (record2.recipientID == request.recipientID) and (record2.recordID == request.recordID)))
-                or  ((num_authorized>2) and ((record3.subjectID == request.subjectID) and (record3.recipientID == request.recipientID) and (record3.recordID == request.recordID)))
-                or  ((num_authorized>3) and ((record4.subjectID == request.subjectID) and (record4.recipientID == request.recipientID) and (record4.recordID == request.recordID)))
-                or  ((num_authorized>4) and ((record5.subjectID == request.subjectID) and (record5.recipientID == request.recipientID) and (record5.recordID == request.recordID)))
-                or  ((num_authorized>5) and ((record6.subjectID == request.subjectID) and (record6.recipientID == request.recipientID) and (record6.recordID == request.recordID)))
-                or  ((num_authorized>6) and ((record7.subjectID == request.subjectID) and (record7.recipientID == request.recipientID) and (record7.recordID == request.recordID)))
-                or  ((num_authorized>7) and ((record8.subjectID == request.subjectID) and (record8.recipientID == request.recipientID) and (record8.recordID == request.recordID)))
-                or  ((num_authorized>8) and ((record9.subjectID == request.subjectID) and (record9.recipientID == request.recipientID) and (record9.recordID == request.recordID)))
-                or  ((num_authorized>9) and ((record10.subjectID == request.subjectID) and (record10.recipientID == request.recipientID) and (record10.recordID == request.recordID))));
+        request if (((num_authorized>0) and authorizes(request, record1))
+                or  ((num_authorized>1) and authorizes(request, record2))
+                or  ((num_authorized>2) and authorizes(request, record3))
+                or  ((num_authorized>3) and authorizes(request, record4))
+                or  ((num_authorized>4) and authorizes(request, record5))
+                or  ((num_authorized>5) and authorizes(request, record6))
+                or  ((num_authorized>6) and authorizes(request, record7))
+                or  ((num_authorized>7) and authorizes(request, record8))
+                or  ((num_authorized>8) and authorizes(request, record9))
+                or  ((num_authorized>9) and authorizes(request, record10)));
 private:
-    record1:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==1;
-    record2:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==2;
-    record3:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==3;
-    record4:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==4;
-    record5:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==5;
-    record6:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==6;
-    record7:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==7;
-    record8:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==8;
-    record9:  cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==9;
-    record10: cell AuthOwnRecordFor = AuthOwnRecordFor(0,0,0) .. auth if num_authorized==10;
+    empty: const AuthOwnRecordFor = AuthOwnRecordFor(0,0,0);
+    record1:  cell AuthOwnRecordFor = empty .. auth if num_authorized==1;
+    record2:  cell AuthOwnRecordFor = empty .. auth if num_authorized==2;
+    record3:  cell AuthOwnRecordFor = empty .. auth if num_authorized==3;
+    record4:  cell AuthOwnRecordFor = empty .. auth if num_authorized==4;
+    record5:  cell AuthOwnRecordFor = empty .. auth if num_authorized==5;
+    record6:  cell AuthOwnRecordFor = empty .. auth if num_authorized==6;
+    record7:  cell AuthOwnRecordFor = empty .. auth if num_authorized==7;
+    record8:  cell AuthOwnRecordFor = empty .. auth if num_authorized==8;
+    record9:  cell AuthOwnRecordFor = empty .. auth if num_authorized==9;
+    record10: cell AuthOwnRecordFor = empty .. auth if num_authorized==10;
 
-    num_authorized: cell int = 0 .. ~num_authorized + 1 @ auth
+    num_authorized: cell int = 0 .. ~num_authorized + 1 @ auth;
+}
+
+reactor PatientList(new_patient: stream unit) {
+
+    auths: stream AuthOwnRecordFor = patient1.auths  if num > 0
+                                   | patient2.auths  if num > 1
+                                   | patient3.auths  if num > 2
+                                   | patient4.auths  if num > 3
+                                   | patient5.auths  if num > 4
+                                   | patient6.auths  if num > 5
+                                   | patient7.auths  if num > 6
+                                   | patient8.auths  if num > 7
+                                   | patient9.auths  if num > 8
+                                   | patient10.auths if num > 9;
+
+    patient1: cell Patient  = empty .. Patient() @ new_patient if num==1;
+private:
+    patient2:  cell Patient = empty .. Patient() @ new_patient if num==2;
+    patient3:  cell Patient = empty .. Patient() @ new_patient if num==3;
+    patient4:  cell Patient = empty .. Patient() @ new_patient if num==4;
+    patient5:  cell Patient = empty .. Patient() @ new_patient if num==5;
+    patient6:  cell Patient = empty .. Patient() @ new_patient if num==6;
+    patient7:  cell Patient = empty .. Patient() @ new_patient if num==7;
+    patient8:  cell Patient = empty .. Patient() @ new_patient if num==8;
+    patient9:  cell Patient = empty .. Patient() @ new_patient if num==9;
+    patient10: cell Patient = empty .. Patient() @ new_patient if num==10;
+    empty: const Patient = Patient();
+
+    num: cell int = 0 .. ~num + 1 @ new_patient;
 }

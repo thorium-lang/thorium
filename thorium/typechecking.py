@@ -1,5 +1,5 @@
 from thorium import ThoriumVisitor, ThoriumParser
-from thorium.decls import Function
+from thorium.decls import Function, TypedIdentifier
 from thorium.reactivetypes import Cell, Stream, base_type
 
 
@@ -8,7 +8,6 @@ def hasStreamType(types):
         if isinstance(type_, Stream):
             return True
     return False
-
 
 class SubExprTypeCheck(ThoriumVisitor):
     def __init__(self, decls, debug=False):

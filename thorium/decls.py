@@ -27,6 +27,7 @@ class Function(ThoriumVisitor, DeclType):
         self.properties = None
         self.f = None
         self.visit(ctx)
+        self.ctx = ctx
 
     def unaryOp(self, ctx):
         f = Operators.unary[ctx.op.text]
@@ -54,9 +55,13 @@ class Function(ThoriumVisitor, DeclType):
         self.result_type = self.visit(ctx.type_())
         self.properties = ctx.functionProperties()
 
-    def setTypeContext(self, z3_types):
+    def setTypeContext(self, z3_types, decls):
+        self.decls = decls
+        self.z3_types = z3_types
         args = [self.name] + [z3_types(param.type) for param in self.params] + [z3_types(self.result_type)]
         self.f = z3.Function(*args)
+        self.type_lookup = {t.name: t for t in self.params}
+        self.visit(self.ctx)
 
     def visitFunctionParams(self, ctx: ThoriumParser.FunctionParamsContext):
         return [self.visit(param) for param in ctx.functionParam()]
@@ -71,9 +76,15 @@ class Function(ThoriumVisitor, DeclType):
         property = self.visit(ctx.expr())
         self.solver.add(property)
 
+    def getMemberAccessor(self, composite, member_name):
+        #composite_type = base_type(composite.thorium_type)
+        composite_z3_type = self.z3_types(composite)
+        return composite_z3_type.__getattribute__(member_name)
+
     def visitMemberAccess(self, ctx: ThoriumParser.MemberAccessContext):
-        print('*************************************** not implemented')
-        pass
+        composite = self.decls[self.type_lookup[ctx.expr().getText()].type]
+        accessor = self.getMemberAccessor(composite, ctx.ID().getText())
+        return accessor(self.visit(ctx.expr()))
 
     def visitId(self, ctx: ThoriumParser.IdContext):
         return self.symbols[ctx.ID().getText()]

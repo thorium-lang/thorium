@@ -44,11 +44,11 @@ def parse_thorium_file(filename, debug=False):
             z3_types.addDatatype(declaration)
             composite_types.append(declaration)
     z3_types.finalizeDatatypes()
+    for f in functions:
+        f.setTypeContext(z3_types, named_lookup(declarations))
     for name in [r.name for r in composite_types
                  if isinstance(r, ReactorType)]:
         TRACES[name] = TraceHeap(name, z3_types(name))
-    for f in functions:
-        f.setTypeContext(z3_types)
 
     return named_lookup(composite_types), named_lookup(functions), z3_types
 
