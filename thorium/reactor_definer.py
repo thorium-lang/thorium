@@ -180,15 +180,17 @@ class ReactorDefiner(ThoriumVisitor):
                 self.local_scope[arg.getText()] = f'{self.expr_name(ctx)}-{arg}'
                 arg_member = self[arg_member]
                 for k in self.all_states():
-                    self.Assert(arg_member[k] == accessor(instance[k]))
+                    self.Assert(arg_member.set(k,accessor(instance[k])))
+
+        result,value = self.getRVs(ctx, ctx.expr())
 
         def condition(k):
             return And(instance.isActive(k), case_checker(instance[k]))
 
         for k in self.streaming_states():
             self.Assert(If(condition(k),
-                           #result(k) == value(k),
-                           result.setValue(k,value[k]),
+                           result(k) == value(k),
+                           #result.set(k,value[k]),
                            result.isNothing(k)))
 
         with self.condition_context(condition):
@@ -217,7 +219,8 @@ class ReactorDefiner(ThoriumVisitor):
             self.Assert(result.isNothing(self.k0-1))
             for k in self.streaming_states():
                 self.Assert(z3.If( z3.And(expr.isActive(k), cases.isActive(k)),
-                                   result.set(k,cases[k]),
+                                   #result.set(k,cases[k]),
+                                   result(k) == cases(k),
                                    result.isNothing(k)))
         else:
             for k in self.all_states():
