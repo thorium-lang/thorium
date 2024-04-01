@@ -46,7 +46,7 @@ class Function(ThoriumVisitor, DeclType):
     def __call__(self, *args):
         self.symbols = {p.name: a for p, a in zip(self.params, args)}
         self.symbols['result'] = self.f(*args)
-        self.visit(self.properties)
+        if self.properties: self.visit(self.properties)
         return self.f(*args)
 
     def visitFunction(self, ctx: ThoriumParser.FunctionContext):

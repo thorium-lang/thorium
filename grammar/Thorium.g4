@@ -73,7 +73,7 @@ ltlProperty:
     | ltlProperty SINCE ltlProperty                 # ltlSince
     | <assoc=right> ltlProperty AND ltlProperty     # ltlAnd
     | <assoc=right> ltlProperty OR ltlProperty      # ltlOr
-    | <assoc=right> ltlProperty (LTLIMPLIES|IMPLIES) ltlProperty # ltlImplication
+    | <assoc=right> ltlProperty IMPLIES ltlProperty # ltlImplication
     | expr                                          # ltlExpr
     ;
 
@@ -84,7 +84,7 @@ ltlProperty:
 //    ;
 
 matchArgs: LPAREN ID (COMMA ID)* RPAREN;
-matchCase: ID matchArgs? LTLIMPLIES expr;
+matchCase: ID matchArgs? MATCHRESULT expr;
 matchCases: LBRACE matchCase (PIPE matchCase)* RBRACE;
 
 expr:
@@ -152,10 +152,10 @@ PREVIOUSLY : 'P' ;
 UNTIL      : 'U' ;
 SINCE      : 'S' ;
 IMPLIES    : '->' ;
-LTLIMPLIES : '=>' ;
 CONST      : 'const';
 MATCH      : 'match';
 MATCHES    : 'matches';
+MATCHRESULT: '=>';
 FORALL     : 'forall' ;
 EXISTS     : 'exists' ;
 CELL       : 'cell' ;

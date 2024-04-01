@@ -36,22 +36,24 @@ class Stream:
 
 class ReactiveValue:
     def __init__(self, trace, accessor, thorium_type, z3_type):
-        self.trace = trace
-        self.accessor = accessor
+        self.trace = trace               # the reactor trace
+        self.accessor = accessor         # access the the member of the reactor
         self.thorium_type = thorium_type
         self.z3_type = z3_type
+        if self.isStream():
+            self.nothing = self.z3_type.nothing
 
     def isStream(self):
         return isinstance(self.thorium_type, Stream)
 
     def isNothing(self, k):
         if self.isStream():
-            return self(k) == self.z3_type.nothing
+            return self.accessor(self.trace[k])==self.nothing
         return False
 
     def isActive(self, k):
         if self.isStream():
-            return self(k) != self.z3_type.nothing
+            return self.accessor(self.trace[k])!=self.nothing
         return True
 
     def isTrue(self, k):
@@ -59,7 +61,7 @@ class ReactiveValue:
             return z3.If(self.isNothing(k), False, self[k])
         return self(k)
 
-    def setValue(self, k, value):
+    def set(self, k, value):
         if self.isStream():
             return self(k) == self.z3_type.event(value)
         return self(k) == value
@@ -68,9 +70,10 @@ class ReactiveValue:
         return self.accessor(self.trace[k])
 
     def __getitem__(self,k):
+        i = self.accessor(self.trace[k])
         if self.isStream():
-            return self.z3_type.value(self(k))
-        return self(k)
+            return self.z3_type.value(i)
+        return i
 
 
 def base_type(type_):

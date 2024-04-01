@@ -1,8 +1,9 @@
 from thorium import ThoriumParser
 from thorium import ThoriumVisitor
 import z3
+from z3 import If,And,Or,Not
 
-from thorium.reactivetypes import ReactiveValue
+from thorium.reactivetypes import ReactiveValue, base_type
 from thorium.reactor_definer import ReactorDefiner
 
 class PropertyDefiner(ReactorDefiner):
@@ -24,144 +25,170 @@ class PropertyDefiner(ReactorDefiner):
         self.debug_assert = parent.debug_assert
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        for k in self.all_states():
-            self.Assert(result[k]==z3.Not(arg.isTrue(k)))
+        Np, p = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(LtlNot(self.k0, self.kK, Np, p))
         self.visitChildren(ctx)
 
     def visitNot(self, ctx: ThoriumParser.NotContext):
-        result, arg = self.getRVs(ctx, ctx.expr())
-        for k in self.all_states():
-            self.Assert(result[k]==z3.Not(arg.isTrue(k)))
+        Np, p = self.getRVs(ctx, ctx.expr())
+        self.AssertAll(LtlNot(self.k0, self.kK, Np, p))
         self.visitChildren(ctx)
 
     def visitLtlAnd(self, ctx: ThoriumParser.LtlAndContext):
-        result, (arg0, arg1) = self.getRVs(ctx, ctx.ltlProperty())
-        for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg0.isTrue(k), arg1.isTrue(k)))
+        pAq, (p,q) = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(LtlAnd(self.k0, self.kK, pAq, p, q))
         self.visitChildren(ctx)
 
     def visitAnd(self, ctx: ThoriumParser.AndContext):
-        result, (arg0,arg1) = self.getRVs(ctx, ctx.expr())
-        for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg0.isTrue(k), arg1.isTrue(k)))
+        pAq, (p,q) = self.getRVs(ctx, ctx.expr())
+        self.AssertAll(LtlAnd(self.k0, self.kK, pAq, p, q))
         self.visitChildren(ctx)
 
-    def visitLtlOr(self, ctx: ThoriumParser.AndContext):
-        result, (arg0, arg1) = self.getRVs(ctx, ctx.ltlProperty())
-        for k in self.all_states():
-            self.Assert(result(k) == z3.Or(arg0.isTrue(k), arg1.isTrue(k)))
+    def visitLtlOr(self, ctx: ThoriumParser.LtlOrContext):
+        pOq, (p,q) = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(LtlOr(self.k0, self.kK, pOq, p, q))
         self.visitChildren(ctx)
 
     def visitOr(self, ctx: ThoriumParser.AndContext):
-        result, (arg0,arg1) = self.getRVs(ctx, ctx.expr())
-        for k in self.all_states():
-            self.Assert(result(k) == z3.Or(arg0.isTrue(k), arg1.isTrue(k)))
+        pOq, (p,q) = self.getRVs(ctx, ctx.expr())
+        self.AssertAll(LtlOr(self.k0, self.kK, pOq, p, q))
         self.visitChildren(ctx)
-
-    def next(self, result: ReactiveValue, arg: ReactiveValue):
-        for k in self.all_states()[:-1]:
-            self.Assert(result(k) == arg.isTrue(k+1))
-        self.Assert(result.isTrue(self.kK))
 
     def visitLtlNext(self, ctx:ThoriumParser.LtlNextContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.next(result, arg)
+        Xp, p = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(next(self.k0, self.kK, Xp, p))
         self.visitChildren(ctx)
-
-    def globally(self, result: ReactiveValue, arg: ReactiveValue):
-        for k in self.all_states():
-            self.Assert(result(k) == z3.And(arg.isTrue(k), result[k+1]))
-        self.Assert(result.isTrue(self.kK+1))  # optimistic semantics
 
     def visitLtlGlobally(self, ctx: ThoriumParser.LtlGloballyContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.AssertAll(globally(self.k0, self.kK, result, arg))
+        Gp, p = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(globally(self.k0, self.kK, Gp, p))
         self.visitChildren(ctx)
-
-    def eventually(self, result: ReactiveValue, arg: ReactiveValue):
-        for k in self.all_states():
-            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k+1)))
-        self.Assert(z3.Not(result.isTrue(self.kK+1)))  # pessimistic semantics
 
     def visitLtlEventually(self, ctx: ThoriumParser.LtlEventuallyContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.eventually(result, arg)
+        Fp, p = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(eventually(self.k0, self.kK, Fp, p))
         self.visitChildren(ctx)
-
-    def previously(self, result: ReactiveValue, arg: ReactiveValue):
-        #for k in self.streaming_states():
-        #    print(f'previously asserting at {k}')
-        #    self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
-        self.Assert(z3.Not(result.isTrue(self.k0-1)))  # pessimistic semantics
-        self.Assert(result(self.k0) == arg.isTrue(self.k0))
-        for k in range(self.k0+1,self.kK+1):
-            self.Assert(result(k) == z3.Or(arg.isTrue(k), result(k-1)))
 
     def visitLtlPreviously(self, ctx: ThoriumParser.LtlPreviouslyContext):
-        result, arg = self.getRVs(ctx, ctx.ltlProperty())
-        self.previously(result, arg)
+        Pp, p = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(previously(self.k0, self.kK, Pp, p))
         self.visitChildren(ctx)
-
-    def until(self, U: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
-        for k in self.all_states():
-            self.Assert(U(k) == z3.Or(q.isTrue(k),
-                                      z3.And(p.isTrue(k),
-                                             U(k+1))))
-        self.Assert(z3.Not(U(self.kK+1)))
 
     def visitLtlUntil(self, ctx: ThoriumParser.LtlUntilContext):
-        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        self.until(result, p, q)
+        pUq, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(until(self.k0, self.kK, pUq, p, q))
         self.visitChildren(ctx)
 
-    def since(self, S: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
-        self.Assert(S.setValue(self.k0 - 1, False))
-        for k in self.all_states():
-            self.Assert(
-                S(k) == z3.Or(q.isTrue(k),
-                              z3.And(p.isTrue(k),
-                                     S(k-1))))
-
     def visitLtlSince(self, ctx: ThoriumParser.LtlSinceContext):
-        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        self.AssertAll(since(self.k0, self.kK, result, p, q))
+        pSq, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(since(self.k0, self.kK, pSq, p, q))
         self.visitChildren(ctx)
 
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
         self.visitChildren(ctx)
 
-    def implication(self, result: ReactiveValue, p: ReactiveValue, q: ReactiveValue):
-        for k in self.all_states():
-            self.Assert(result.setValue(k, z3.Or(z3.Not(p.isTrue(k)), q.isTrue(k))))
-
     def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
-        result, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
-        self.implication(result, p, q)
+        pIq, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
+        self.AssertAll(implies(self.k0, self.kK, pIq, p, q))
         self.visitChildren(ctx)
 
     def visitImplication(self, ctx: ThoriumParser.ImplicationContext):
-        result, (p, q) = self.getRVs(ctx, ctx.expr())
-        self.implication(result, p, q)
+        pIq, (p, q) = self.getRVs(ctx, ctx.expr())
+        self.AssertAll(implies(self.k0, self.kK, pIq, p, q))
         self.visitChildren(ctx)
 
-def globally(k0     : int, # initial state
-             kK     : int, # final state
-             result : ReactiveValue,
-             arg    : ReactiveValue):
-    for k in range(k0, kK+1):
-        yield result[k] == z3.And(arg.isTrue(k),
-                                  result[k+1])
-    # optimistic semantics
-    yield result[kK+1] == True
+    def visitEquals(self, ctx: ThoriumParser.EqualsContext):
+        result, (p, q) = self.getRVs(ctx, ctx.expr())
+        if(base_type(p.thorium_type)=='bool'):
+            for k in self.all_states():
+                self.Assert(result[k] == (p.isTrue(k) == q.isTrue(k)))
+        else:
+            for k in self.all_states():
+                self.Assert(result[k] == (p[k] == q[k]))
 
-def since(k0     : int, # initial state
-          kK     : int, # final state
-          result : ReactiveValue,
-          p      : ReactiveValue,
-          q      : ReactiveValue):
-    yield z3.Not(result[k0-1])
+def LtlNot(k0 : int,
+           kK : int,
+           Np : ReactiveValue,
+           p  : ReactiveValue):
+    for k in range(k0-1,kK+1):
+        #yield Np.set(k,Not(p.isTrue(k)))
+        yield Np[k] == Not(p.isTrue(k))
+
+def LtlAnd(k0  : int, # initial state
+          kK  : int, # final state
+          pAq : ReactiveValue,
+          p   : ReactiveValue,
+          q   : ReactiveValue):
+    for k in range(k0-1, kK+1):
+        #yield pAq.set(k,And(p.isTrue(k), q.isTrue(k)))
+        yield pAq[k] == And(p.isTrue(k), q.isTrue(k))
+
+def LtlOr(k0  : int, # initial state
+          kK  : int, # final state
+          pOq : ReactiveValue,
+          p   : ReactiveValue,
+          q   : ReactiveValue):
+    for k in range(k0-1, kK+1):
+        #yield pOq.set(k,Or(p.isTrue(k), q.isTrue(k)))
+        yield pOq[k] == Or(p.isTrue(k), q.isTrue(k))
+
+def implies(k0  : int, # initial state
+            kK  : int, # final state
+            pIq : ReactiveValue,
+            p   : ReactiveValue,
+            q   : ReactiveValue):
+    for k in range(k0-1, kK+1):
+        #yield pIq.set(k,Or(Not(p.isTrue(k)), q.isTrue(k)))
+        yield pIq[k] == Or(Not(p.isTrue(k)), q.isTrue(k))
+
+def since(k0  : int, # initial state
+          kK  : int, # final state
+          pSq : ReactiveValue,
+          p   : ReactiveValue,
+          q   : ReactiveValue):
+    yield Not(pSq[k0 - 1])
     for k in range(k0, kK+1):
-        yield result[k] == z3.Or(q.isTrue(k),
-                                 z3.And(p.isTrue(k),
-                                        result[k-1]))
+        yield pSq[k] == Or(q.isTrue(k), And(p.isTrue(k), pSq[k-1]))
+
+def until(k0  : int, # initial state
+          kK  : int, # final state
+          pUq : ReactiveValue,
+          p   : ReactiveValue,
+          q   : ReactiveValue):
+    for k in range(k0, kK+1):
+        yield pUq[k] == Or(q.isTrue(k), And(p.isTrue(k), pUq[k+1]))
+    yield Not(pUq(kK+1))
+
+def globally(k0 : int, # initial state
+             kK : int, # final state
+             Gp : ReactiveValue,
+             p  : ReactiveValue):
+    for k in range(k0, kK+1):
+        yield Gp[k] == And(p.isTrue(k), Gp[k+1])
+    yield Gp[kK+1] # optimistic semantics
+
+def eventually(k0 : int,
+               kK : int,
+               Fp : ReactiveValue,
+               p  : ReactiveValue):
+        print(f'eventually stream? {Fp.isStream()}')
+        for k in range(k0,kK+1):
+            yield Fp[k] == Or(p.isTrue(k), Fp[k+1])
+        yield Not(Fp[kK+1])  # pessimistic semantics
+
+def previously(k0 : int,
+               kK : int,
+               Pp : ReactiveValue,
+               p  : ReactiveValue):
+    yield Not(Pp[k0-1])
+    yield Pp(k0) == p.isTrue(k0)
+    for k in range(k0+1,kK+1):
+        yield Pp[k] == Or(p.isTrue(k), Pp[k-1])
+
+def next(k0 : int,
+         kK : int,
+         Xp : ReactiveValue,
+         p  : ReactiveValue):
+    for k in range(k0,kK):
+        yield Xp[k] == p.isTrue(k+1)
+    yield Not(Xp[kK])

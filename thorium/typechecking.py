@@ -15,6 +15,7 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.reactor = None
         self.debug = debug
         self.local_scope = {}
+        self.defining_properties = False
 
     def expr_name(self, ctx):
         return self.reactor.expr_name(ctx)
@@ -59,8 +60,10 @@ class SubExprTypeCheck(ThoriumVisitor):
             self.visit(ctx.expr())
 
     def visitReactorProperty(self, ctx: ThoriumParser.ReactorPropertyContext):
+        self.defining_properties = True
         self.set_expr_name(ctx.property_(), ctx.ID().getText())
         self.visit(ctx.property_())
+        self.defining_properties = False
 
     def visitProperty(self, ctx: ThoriumParser.PropertyContext):
         if ctx.ltlProperty():
@@ -68,7 +71,7 @@ class SubExprTypeCheck(ThoriumVisitor):
             return self.visit(ctx.ltlProperty())
 
     def visitLtlNegation(self, ctx: ThoriumParser.LtlNegationContext):
-        self.visitSubExpr(ctx, ctx.ltlProperty())
+        t = self.visitSubExpr(ctx, ctx.ltlProperty())
         return Cell('bool')
 
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
@@ -203,7 +206,6 @@ class SubExprTypeCheck(ThoriumVisitor):
         self.set_expr_name(ctx.expr(), f'{self.expr_name(ctx)}-1')
         type_ = self.visit(ctx.expr())
         self.reactor.addSubExpr(ctx.expr(), type_)
-
         composite_type = self.decls[base_type(type_)]
         member_type = composite_type.getPublicMemberType(ctx.ID().getText())
         if isinstance(type_, Stream):
@@ -271,25 +273,25 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitNot(self, ctx: ThoriumParser.NotContext):
         type_ = self.visitSubExpr(ctx)
-        if isinstance(type_, Stream):
+        if (not self.defining_properties) and isinstance(type_, Stream):
             return Stream('bool')
         return Cell('bool')
 
     def visitAnd(self, ctx: ThoriumParser.AndContext):
         types = self.visitSubExprs(ctx)
-        if hasStreamType(types):
+        if (not self.defining_properties) and hasStreamType(types):
             return Stream('bool')
         return Cell('bool')
 
     def visitOr(self, ctx: ThoriumParser.AndContext):
         types = self.visitSubExprs(ctx)
-        if hasStreamType(types):
+        if (not self.defining_properties) and hasStreamType(types):
             return Stream('bool')
         return Cell('bool')
 
     def visitImplication(self, ctx: ThoriumParser.ImplicationContext):
         types = self.visitSubExprs(ctx)
-        if hasStreamType(types):
+        if (not self.defining_properties) and hasStreamType(types):
             return Stream('bool')
         return Cell('bool')
 
