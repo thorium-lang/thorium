@@ -126,25 +126,25 @@ reactor AuthorizedList(auth:    stream AuthOwnRecordFor,
     authorized: stream RequestAuthRelease =
         request if (((num_authorized>0) and authorizes(request, record1))
                 or  ((num_authorized>1) and authorizes(request, record2))
-                or  ((num_authorized>2) and authorizes(request, record3)));
-                //or  ((num_authorized>3) and authorizes(request, record4))
-                //or  ((num_authorized>4) and authorizes(request, record5))
-                //or  ((num_authorized>5) and authorizes(request, record6))
-                //or  ((num_authorized>6) and authorizes(request, record7))
-                //or  ((num_authorized>7) and authorizes(request, record8))
-                //or  ((num_authorized>8) and authorizes(request, record9))
-                //or  ((num_authorized>9) and authorizes(request, record10)));
+                or  ((num_authorized>2) and authorizes(request, record3))
+                or  ((num_authorized>3) and authorizes(request, record4))
+                or  ((num_authorized>4) and authorizes(request, record5))
+                or  ((num_authorized>5) and authorizes(request, record6))
+                or  ((num_authorized>6) and authorizes(request, record7))
+                or  ((num_authorized>7) and authorizes(request, record8))
+                or  ((num_authorized>8) and authorizes(request, record9))
+                or  ((num_authorized>9) and authorizes(request, record10)));
 private:
     record1:  cell AuthOwnRecordFor = empty .. auth if num_authorized==1;
     record2:  cell AuthOwnRecordFor = empty .. auth if num_authorized==2;
     record3:  cell AuthOwnRecordFor = empty .. auth if num_authorized==3;
-    //record4:  cell AuthOwnRecordFor = empty .. auth if num_authorized==4;
-    //record5:  cell AuthOwnRecordFor = empty .. auth if num_authorized==5;
-    //record6:  cell AuthOwnRecordFor = empty .. auth if num_authorized==6;
-    //record7:  cell AuthOwnRecordFor = empty .. auth if num_authorized==7;
-    //record8:  cell AuthOwnRecordFor = empty .. auth if num_authorized==8;
-    //record9:  cell AuthOwnRecordFor = empty .. auth if num_authorized==9;
-    //record10: cell AuthOwnRecordFor = empty .. auth if num_authorized==10;
+    record4:  cell AuthOwnRecordFor = empty .. auth if num_authorized==4;
+    record5:  cell AuthOwnRecordFor = empty .. auth if num_authorized==5;
+    record6:  cell AuthOwnRecordFor = empty .. auth if num_authorized==6;
+    record7:  cell AuthOwnRecordFor = empty .. auth if num_authorized==7;
+    record8:  cell AuthOwnRecordFor = empty .. auth if num_authorized==8;
+    record9:  cell AuthOwnRecordFor = empty .. auth if num_authorized==9;
+    record10: cell AuthOwnRecordFor = empty .. auth if num_authorized==10;
 
     empty: const AuthOwnRecordFor = AuthOwnRecordFor(0,0,0);
 

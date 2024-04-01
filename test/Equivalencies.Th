@@ -1,0 +1,26 @@
+reactor Equivalencies {
+    p     : stream bool;
+    not_p : stream bool = not p;
+properties:
+    Gp:    G p;
+    //Fp:    F p;
+    //Fnp:   F not_p;
+    //Fnotp: F not p;
+    nFnp: not F not_p;
+    //nGnp: not G not p;
+
+    //pactivity:        active(p)
+    //      and       X inactive(p)
+    //      and     X X active(p)
+    //      and   X X X inactive(p)
+    //      and X X X X active(p);
+
+    //ptruth:           p
+    //      and     X X not p
+    //      and X X X X p;
+
+    //bad: pactivity and ptruth -> false;
+    //good: (pAq == n_npVnq);
+    Fp_nGnp: G (F p == not G not_p);
+    Gp_nFnp: G (G p == not F not_p);
+}
