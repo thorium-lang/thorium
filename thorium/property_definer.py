@@ -84,9 +84,6 @@ class PropertyDefiner(ReactorDefiner):
         self.AssertAll(since(self.k0, self.kK, pSq, p, q))
         self.visitChildren(ctx)
 
-    def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
-        self.visitChildren(ctx)
-
     def visitLtlImplication(self, ctx: ThoriumParser.LtlImplicationContext):
         pIq, (p, q) = self.getRVs(ctx, ctx.ltlProperty())
         self.AssertAll(implies(self.k0, self.kK, pIq, p, q))
@@ -97,21 +94,22 @@ class PropertyDefiner(ReactorDefiner):
         self.AssertAll(implies(self.k0, self.kK, pIq, p, q))
         self.visitChildren(ctx)
 
-    def visitEquals(self, ctx: ThoriumParser.EqualsContext):
-        result, (p, q) = self.getRVs(ctx, ctx.expr())
-        if(base_type(p.thorium_type)=='bool'):
-            for k in self.all_states():
-                self.Assert(result[k] == (p.isTrue(k) == q.isTrue(k)))
-        else:
-            for k in self.all_states():
-                self.Assert(result[k] == (p[k] == q[k]))
+    #def visitEquals(self, ctx: ThoriumParser.EqualsContext):
+    #    print(f'visitEquals {ctx.getText()} {self.expr_name(ctx)}')
+    #    result, (p, q) = self.getRVs(ctx, ctx.expr())
+    #    if(base_type(p.thorium_type)=='bool'):
+    #        for k in self.all_states():
+    #            self.Assert(result.set(k,(p.isTrue(k) == q.isTrue(k))))
+    #    else:
+    #        for k in self.all_states():
+    #            self.Assert(result.set(k,(p[k] == q[k])))
+    #    self.visitChildren(ctx)
 
 def LtlNot(k0 : int,
            kK : int,
            Np : ReactiveValue,
            p  : ReactiveValue):
-    for k in range(k0-1,kK+1):
-        #yield Np.set(k,Not(p.isTrue(k)))
+    for k in range(k0,kK+1):
         yield Np[k] == Not(p.isTrue(k))
 
 def LtlAnd(k0  : int, # initial state
@@ -120,7 +118,6 @@ def LtlAnd(k0  : int, # initial state
           p   : ReactiveValue,
           q   : ReactiveValue):
     for k in range(k0-1, kK+1):
-        #yield pAq.set(k,And(p.isTrue(k), q.isTrue(k)))
         yield pAq[k] == And(p.isTrue(k), q.isTrue(k))
 
 def LtlOr(k0  : int, # initial state
@@ -171,17 +168,15 @@ def eventually(k0 : int,
                kK : int,
                Fp : ReactiveValue,
                p  : ReactiveValue):
-        print(f'eventually stream? {Fp.isStream()}')
-        for k in range(k0,kK+1):
-            yield Fp[k] == Or(p.isTrue(k), Fp[k+1])
-        yield Not(Fp[kK+1])  # pessimistic semantics
+    for k in range(k0,kK+1):
+        yield Fp[k] == Or(p.isTrue(k), Fp[k+1])
+    yield Not(Fp[kK+1])  # pessimistic semantics
 
 def previously(k0 : int,
                kK : int,
                Pp : ReactiveValue,
                p  : ReactiveValue):
     yield Not(Pp[k0-1])
-    yield Pp(k0) == p.isTrue(k0)
     for k in range(k0+1,kK+1):
         yield Pp[k] == Or(p.isTrue(k), Pp[k-1])
 

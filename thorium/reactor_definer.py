@@ -3,7 +3,7 @@ from thorium.z3types import Z3Types
 from thorium.operators import Operators
 from typing import List
 import z3
-from z3 import If,And
+from z3 import If,And,Or,Not,Implies
 from thorium.reactivetypes import ReactiveValue
 from thorium.reactivetypes import base_type
 from thorium.decls import StructType, ReactorType
@@ -113,7 +113,7 @@ class ReactorDefiner(ThoriumVisitor):
               args: List[ReactiveValue],
               result: ReactiveValue):
         for k in self.all_states(self.const_def):
-            active = z3.And(*[arg.isActive(k) for arg in args])
+            active = And(*[arg.isActive(k) for arg in args])
             self.Assert(If(active,
                            result.set(k,f(*[arg[k] for arg in args])),
                            result.isNothing(k)))
@@ -218,15 +218,12 @@ class ReactorDefiner(ThoriumVisitor):
         if result.isStream():
             self.Assert(result.isNothing(self.k0-1))
             for k in self.streaming_states():
-                self.Assert(z3.If( z3.And(expr.isActive(k), cases.isActive(k)),
-                                   #result.set(k,cases[k]),
+                self.Assert(If(And(expr.isActive(k), cases.isActive(k)),
                                    result(k) == cases(k),
                                    result.isNothing(k)))
         else:
             for k in self.all_states():
-                self.Assert(z3.Implies( cases.isActive(k),
-                                   result[k] == cases[k]))
-            pass
+                self.Assert(Implies( cases.isActive(k), result[k] == cases[k]))
         self.visitChildren(ctx)
 
     def visitStreamMatches(self, ctx:ThoriumParser.StreamMatchesContext):
@@ -265,9 +262,9 @@ class ReactorDefiner(ThoriumVisitor):
             if composite.isStream():
                 self.Assert(result.isNothing(self.k0-1))
                 for k in self.streaming_states():
-                    self.Assert(z3.If(composite.isActive(k),
-                                      result.set(k,accessor(composite[k])),
-                                      result.isNothing(k)))
+                    self.Assert(If(composite.isActive(k),
+                                   result.set(k,accessor(composite[k])),
+                                   result.isNothing(k)))
             else:
                 for k in self.all_states():
                     self.Assert(result(k) == accessor(composite[k]))
@@ -366,12 +363,12 @@ class ReactorDefiner(ThoriumVisitor):
 
     def active(self,args,result):
         for k in self.all_states():
-            missing_args = z3.Or(*[arg.isNothing(k) for arg in args])
-            self.Assert(result[k] == z3.Not(missing_args))
+            missing_args = Or(*[arg.isNothing(k) for arg in args])
+            self.Assert(result[k] == Not(missing_args))
 
     def inactive(self,args,result):
         for k in self.all_states():
-            missing_args = z3.Or(*[arg.isNothing(k) for arg in args])
+            missing_args = Or(*[arg.isNothing(k) for arg in args])
             self.Assert(result[k] == missing_args)
 
     def constructReactor(self,
@@ -385,13 +382,13 @@ class ReactorDefiner(ThoriumVisitor):
         trigger_args = [arg for param,arg in zip([reactortype.getType(name) for name in reactortype.getParamNames()],args)
                         if arg.isStream() and not param.isStream()]
         if trigger_args:
-            inactive = z3.Or(*[arg.isNothing(start_state) for arg in trigger_args])
-            active = z3.And(*[arg.isActive(start_state) for arg in trigger_args])
+            inactive = Or(*[arg.isNothing(start_state) for arg in trigger_args])
+            active = And(*[arg.isActive(start_state) for arg in trigger_args])
         else:
             inactive = False
             active = True
         if self.condition:
-            self.solver.condition = z3.And(self.condition(start_state), active)
+            self.solver.condition = And(self.condition(start_state), active)
         else:
             self.solver.condition = active
         definer(instancename, reactortype.name, start_state, self.final_state, self.solver)
@@ -480,6 +477,24 @@ class ReactorDefiner(ThoriumVisitor):
                            result.isNothing(k)))
         self.visitChildren(ctx)
 
+    def visitParen(self, ctx:ThoriumParser.ParenContext):
+        child = ctx.expr()
+        if(isinstance(child,ThoriumParser.IdContext)):
+            id = self[child.ID().getText()]
+            result, = self.getRVs(ctx)
+            for k in self.all_states():
+                self.Assert(result(k) == id(k))
+        self.visitChildren(ctx)
+
+    def visitLtlParen(self, ctx:ThoriumParser.LtlParenContext):
+        child = ctx.ltlProperty()
+        if(isinstance(child,ThoriumParser.IdContext)):
+            id = self[child.ID().getText()]
+            result, = self.getRVs(ctx)
+            for k in self.all_states():
+                self.Assert(result(k) == id(k))
+        self.visitChildren(ctx)
+
     def visitMult(self, ctx: ThoriumParser.MultContext):
         self.binOp(ctx)
         self.visitChildren(ctx)
@@ -531,7 +546,7 @@ class ReactorDefiner(ThoriumVisitor):
     def merge(self, result, s1, s2):
         self.Assert(result.isNothing(self.k0-1))
         for k in self.streaming_states():
-            self.Assert(result(k)==z3.If(s1.isNothing(k), s2(k), s1(k)))
+            self.Assert(result(k)==If(s1.isNothing(k), s2(k), s1(k)))
 
     def visitMerge(self, ctx: ThoriumParser.MergeContext):
         result, (s1, s2) = self.getRVs(ctx, ctx.expr())
@@ -564,9 +579,9 @@ class ReactorDefiner(ThoriumVisitor):
         self.Assert(result[self.k0 - 1] == init[self.k0])
         for k in self.streaming_states():
             self.Assert(
-                result[k] == z3.If(update.isNothing(k),
-                                   result[k-1],
-                                   update[k]))
+                result[k] == If(update.isNothing(k),
+                                result[k-1],
+                                update[k]))
 
     def visitHold(self, ctx: ThoriumParser.HoldContext):
         result, (init, update) = self.getRVs(ctx, ctx.expr())
@@ -594,9 +609,9 @@ def hold(k0     : int, # initial state
          update : ReactiveValue):
     yield result[k0-1] == init[k0]
     for k in range(k0, kK+1):
-        yield result[k] == z3.If(update.isNothing(k),
-                                 result[k-1],
-                                 update[k])
+        yield result[k] == If(update.isNothing(k),
+                              result[k-1],
+                              update[k])
 
 def filter(k0        : int, # initial state
            kK        : int, # final state
@@ -605,12 +620,12 @@ def filter(k0        : int, # initial state
            condition : ReactiveValue):
     yield result.isNothing(k0-1) # streams are empty during init
     for k in range(k0, kK+1):
-        active = z3.And(condition.isActive(k),
-                        value.isActive(k),
-                        condition[k])
-        yield z3.If(active,
-                    result.set(k,value[k]),
-                    result.isNothing(k))
+        active = And(condition.isActive(k),
+                     value.isActive(k),
+                     condition[k])
+        yield If(active,
+                 result.set(k,value[k]),
+                 result.isNothing(k))
 
 def snapshot(k0        : int, # initial state
              kK        : int, # final state
@@ -619,9 +634,9 @@ def snapshot(k0        : int, # initial state
              stream    : ReactiveValue):
     yield result.isNothing(k0-1)
     for k in range(k0, kK+1):
-        yield z3.If(stream.isNothing(k),
-                    result.isNothing(k),
-                    result.set(k,cell[k]))
+        yield If(stream.isNothing(k),
+                 result.isNothing(k),
+                 result.set(k,cell[k]))
 
 def merge(k0     : int, # initial state
           kK     : int, # final state
@@ -630,6 +645,6 @@ def merge(k0     : int, # initial state
           s2     : ReactiveValue):
     yield result.isNothing(k0-1)
     for k in range(k0, kK+1):
-        yield result(k) == z3.If(s1.isNothing(k),
+        yield result(k) == If(s1.isNothing(k),
                                  s2(k),
                                  s1(k))

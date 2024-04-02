@@ -76,7 +76,9 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitLtlParen(self, ctx: ThoriumParser.LtlParenContext):
         self.set_expr_name(ctx.ltlProperty(), self.expr_name(ctx))
-        return self.visit(ctx.ltlProperty())
+        T = self.visit(ctx.ltlProperty())
+        print(f'LTLParen is of type {T}')
+        return T
 
     def visitLtlNext(self, ctx: ThoriumParser.LtlNextContext):
         self.visitSubExpr(ctx, ctx.ltlProperty())
@@ -245,7 +247,10 @@ class SubExprTypeCheck(ThoriumVisitor):
 
     def visitParen(self, ctx: ThoriumParser.ParenContext):
         self.set_expr_name(ctx.expr(), self.expr_name(ctx))
-        return self.visit(ctx.expr())
+        T = self.visit(ctx.expr())
+        print(f'Paren is of type {T}')
+        return T
+        #return self.visit(ctx.expr())
 
     def visitMult(self, ctx: ThoriumParser.MultContext):
         types = self.visitSubExprs(ctx)
