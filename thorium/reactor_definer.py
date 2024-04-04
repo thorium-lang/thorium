@@ -104,8 +104,9 @@ class ReactorDefiner(ThoriumVisitor):
         if debug or self.debug_assert:
             print(statement)
         if self.solver.condition is not None:
-            return self.solver.add(z3.If(self.solver.condition,
-                                         statement,True))
+            #print(Implies(self.solver.condition, statement))
+            #return self.solver.add(Implies(self.solver.condition, statement))
+            return self.solver.add(If(self.solver.condition, statement,True))
         else:
             return self.solver.add(statement)
 
@@ -415,16 +416,19 @@ class ReactorDefiner(ThoriumVisitor):
         args = [self[self.expr_name(expr)] for expr in ctx.expr()]
         result = self[self.expr_name(ctx)]
         if ctx.ID().getText()=='unit':
-            from thorium.snapshot_trigger import SnapshotTrigger
-            SnapshotTrigger(self).visitChildren(ctx)
+            #from thorium.snapshot_trigger import SnapshotTrigger
+            #SnapshotTrigger(self).visitChildren(ctx)
+            self.visitChildren(ctx)
             self.unit(args,result)
         elif ctx.ID().getText()=='active':
-            from thorium.snapshot_trigger import SnapshotTrigger
-            SnapshotTrigger(self).visitChildren(ctx)
+            #from thorium.snapshot_trigger import SnapshotTrigger
+            #SnapshotTrigger(self).visitChildren(ctx)
+            self.visitChildren(ctx)
             self.active(args,result)
         elif ctx.ID().getText()=='inactive':
-            from thorium.snapshot_trigger import SnapshotTrigger
-            SnapshotTrigger(self).visitChildren(ctx)
+            #from thorium.snapshot_trigger import SnapshotTrigger
+            #SnapshotTrigger(self).visitChildren(ctx)
+            self.visitChildren(ctx)
             self.inactive(args,result)
         elif ctx.ID().getText()=='uuid':
             global UUID
@@ -540,8 +544,9 @@ class ReactorDefiner(ThoriumVisitor):
         self.AssertAll(snapshot(self.k0, self.kK, result, cell, stream))
         with self.condition_context(lambda k: stream.isActive(k)):
             self.visit(ctx.expr(0))
-        from thorium.snapshot_trigger import SnapshotTrigger
-        SnapshotTrigger(self).visit(ctx.expr(1))
+        #from thorium.snapshot_trigger import SnapshotTrigger
+        #SnapshotTrigger(self).visit(ctx.expr(1))
+        self.visitChildren(ctx)
 
     def merge(self, result, s1, s2):
         self.Assert(result.isNothing(self.k0-1))
