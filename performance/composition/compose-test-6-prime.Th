@@ -1,0 +1,37 @@
+reactor Sum( c: cell int, in : stream int) {
+    out: stream int = c * in;
+}
+
+reactor Pipeline(in: stream int) {
+    //s1: const Sum = Sum(f1, in);
+    //s2: const Sum = Sum(f2, s1.out);
+    //s3: const Sum = Sum(f3, s2.out);
+    //s4: const Sum = Sum(f4, s3.out);
+
+    //s5: const Sum = Sum(f5, s4.out);
+    //s6: const Sum = Sum(f6, s5.out);
+    //s7: const Sum = Sum(f7, s6.out);
+    //s8: const Sum = Sum(f8, s7.out);
+    //out: stream int = f1*f2*f3*f4*in;
+    //out: stream int = s4.out;
+private:
+    f1: const int;
+    f2: const int;
+    f3: const int;
+    //f4: const int;
+    //f5: const int;
+    //f6: const int;
+    //f7: const int;
+    //f8: const int;
+    C: cell bool = 0 < f1 and f1 < 10
+               and 0 < f2 and f2 < 10
+               and 0 < f3 and f3 < 10;
+               //and 0 < f4 and f4 < 10;
+               //and 0 < f5 and f5 < 10
+               //and 0 < f6 and f6 < 10
+               //and 0 < f7 and f7 < 10
+               //and 0 < f8 and f8 < 10;
+properties:
+    //bounded: (G C) -> not F ( (in==1) and (out/in > 100000000) );
+    bounded: (G C) -> not F ( (in==1) and (f1*f2*f3 > 1000));
+}

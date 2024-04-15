@@ -21,7 +21,62 @@ private:
                                  | CFG::S2(c) => c
                                  | CFG::S3(c) => c
                                  };
+    nSn: stream bool = not active(cfg);
+    S1: stream bool = active(match cfg {CFG::S1 => cfg});
+    S2: stream bool = active(match cfg {CFG::S2 => cfg});
+    S3: stream bool = active(match cfg {CFG::S3 => cfg});
 properties:
-    bounded: (G (0<=C and C<10)) => not F ( (in==1) and
-                                            (out/in > 1000) );
+    //bounded: G (in==1) -> (G (0<=C and C<10)) -> not F (out/in > 1000);
+    uroll_bounded: G (in==1) -> (G (0<=C and C<10)) -> (
+               ((S1 and X S2 and X X S3)  -> not F (out/in > 1000)) and
+               ((S1 and X S3 and X X S2)  -> not F (out/in > 1000)) and
+               ((S2 and X S1 and X X S3)  -> not F (out/in > 1000)) and
+               ((S2 and X S3 and X X S1)  -> not F (out/in > 1000)) and
+               ((S3 and X S1 and X X S2)  -> not F (out/in > 1000)) and
+               ((S3 and X S2 and X X S1)  -> not F (out/in > 1000)) and
+
+               ((S1 and X S2 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S1 and X S3 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S2 and X S1 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S2 and X S3 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S3 and X S1 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S3 and X S2 and X X nSn)  -> not F (out/in > 1000)) and
+
+               ((S1 and X nSn and X X S2)  -> not F (out/in > 1000)) and
+               ((S1 and X nSn and X X S3)  -> not F (out/in > 1000)) and
+               ((S2 and X nSn and X X S1)  -> not F (out/in > 1000)) and
+               ((S2 and X nSn and X X S3)  -> not F (out/in > 1000)) and
+               ((S3 and X nSn and X X S1)  -> not F (out/in > 1000)) and
+               ((S3 and X nSn and X X S2)  -> not F (out/in > 1000)) and
+
+               ((nSn and X S1 and X X S2)  -> not F (out/in > 1000)) and
+               ((nSn and X S1 and X X S3)  -> not F (out/in > 1000)) and
+               ((nSn and X S2 and X X S1)  -> not F (out/in > 1000)) and
+               ((nSn and X S2 and X X S3)  -> not F (out/in > 1000)) and
+               ((nSn and X S3 and X X S1)  -> not F (out/in > 1000)) and
+               ((nSn and X S3 and X X S2)  -> not F (out/in > 1000)) and
+
+               ((nSn and X nSn and X X S1)  -> not F (out/in > 1000)) and
+               ((nSn and X nSn and X X S2)  -> not F (out/in > 1000)) and
+               ((nSn and X nSn and X X S3)  -> not F (out/in > 1000)) and
+
+               ((nSn and X S1 and X X nSn)  -> not F (out/in > 1000)) and
+               ((nSn and X S2 and X X nSn)  -> not F (out/in > 1000)) and
+               ((nSn and X S3 and X X nSn)  -> not F (out/in > 1000)) and
+
+               ((S1 and X nSn and X X nSn)  -> not F (out/in > 1000)) and
+               ((S2 and X nSn and X X nSn)  -> not F (out/in > 1000)) and
+               ((S3 and X nSn and X X nSn)  -> not F (out/in > 1000)) );
+    //symmetry
+    bounded: G (in==1) -> (G (0<=C and C<10)) -> (
+               ((S1 and X S2 and X X S3)   -> not F (out/in > 1000)) and
+               ((S1 and X S2 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S1 and X S3 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S2 and X S3 and X X nSn)  -> not F (out/in > 1000)) and
+               ((S1 and X nSn and X X nSn) -> not F (out/in > 1000)) and
+               ((S2 and X nSn and X X nSn) -> not F (out/in > 1000)) and
+               ((S3 and X nSn and X X nSn) -> not F (out/in > 1000)) );
+    //bounded: (S1 and not X active(cfg) and not X X active(cfg)) -> (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 1000) );
+    //bounded: (S1 and X S2 and not X X active(cfg)) -> (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 1000) );
+    //bounded: (S1 and X S2 and X X S3) -> (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 1000) );
 }

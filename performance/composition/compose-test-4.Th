@@ -1,5 +1,5 @@
 reactor Sum( c: cell int, in : stream int) {
-    out: stream int = c + in;
+    out: stream int = c * in;
 }
 
 datatype CFG {
@@ -25,7 +25,36 @@ private:
                                  | CFG::S3(c) => c
                                  | CFG::S4(c) => c
                                  };
+
+    Sx: stream bool = not active(cfg);
+    S1: stream bool = active(match cfg {CFG::S1 => cfg});
+    S2: stream bool = active(match cfg {CFG::S2 => cfg});
+    S3: stream bool = active(match cfg {CFG::S3 => cfg});
+    S4: stream bool = active(match cfg {CFG::S4 => cfg});
 properties:
-    bounded: (G (0<=C and C<10)) => not F ( (in==1) and
-                                            (out/in > 40) );
+    //bounded:  (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 10000) );
+    //bounded: (S1 and X S2 and X X S3 and X X X S4) -> (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 10000) );
+    bounded: G(in==1) -> G(0<=C and C<10) -> (
+        ((S1 and X S2 and X X S3 and X X X S4) -> not F (out > 10000)) and
+
+        ((S1 and X S2 and X X S3 and X X X Sx) -> not F (out > 10000)) and
+        ((S1 and X S2 and X X S4 and X X X Sx) -> not F (out > 10000)) and
+        ((S1 and X S3 and X X S4 and X X X Sx) -> not F (out > 10000)) and
+        ((S2 and X S3 and X X S4 and X X X Sx) -> not F (out > 10000)) and
+
+        ((S1 and X S2 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S1 and X S3 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S1 and X S4 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S2 and X S3 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S2 and X S4 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S3 and X S4 and X X Sx and X X X Sx) -> not F (out > 10000)) and
+
+        ((S1 and X Sx and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S2 and X Sx and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S3 and X Sx and X X Sx and X X X Sx) -> not F (out > 10000)) and
+        ((S4 and X Sx and X X Sx and X X X Sx) -> not F (out > 10000)) and
+
+        ((Sx and X Sx and X X Sx and X X X Sx) -> not F (out > 10000)) );
+
+    //bounded: (S1 and X S2 and X X S3 and X X X not(active(cfg))) -> (G (0<=C and C<10)) -> not F ( (in==1) and (out/in > 40) );
 }

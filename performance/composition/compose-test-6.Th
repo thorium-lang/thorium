@@ -34,6 +34,6 @@ private:
                                  | CFG::S6(c) => c
                                  };
 properties:
-    bounded: (G (0<=C and C<10)) => not F ( (in==1) and
+    bounded: (G (0<=C and C<10)) -> not F ( (in==1) and
                                             (out/in > 60) );
 }
