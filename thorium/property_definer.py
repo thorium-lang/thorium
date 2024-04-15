@@ -177,7 +177,7 @@ def previously(k0 : int,
                Pp : ReactiveValue,
                p  : ReactiveValue):
     yield Not(Pp[k0-1])
-    for k in range(k0+1,kK+1):
+    for k in range(k0,kK+1):
         yield Pp[k] == Or(p.isTrue(k), Pp[k-1])
 
 def next(k0 : int,
